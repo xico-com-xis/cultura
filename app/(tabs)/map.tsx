@@ -1,11 +1,12 @@
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { Colors } from '@/constants/Colors';
+import { useEvents } from '@/context/EventContext';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import * as Location from 'expo-location';
 import { StatusBar } from 'expo-status-bar';
 import React, { useEffect, useRef, useState } from 'react';
 import { Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import MapView, { Polygon, Polyline, PROVIDER_GOOGLE } from 'react-native-maps';
+import MapView, { Callout, Marker, Polygon, Polyline, PROVIDER_GOOGLE } from 'react-native-maps';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export default function MapScreen() {
@@ -16,6 +17,8 @@ export default function MapScreen() {
   const [drawingMode, setDrawingMode] = useState(false);
   const [polygonCoords, setPolygonCoords] = useState<Array<{ latitude: number; longitude: number }>>([]);
   const [savedPolygons, setSavedPolygons] = useState<Array<Array<{ latitude: number; longitude: number }>>>([]);
+  const { events } = useEvents();
+  const [showEvents, setShowEvents] = useState(true);
 
   // Request location permissions and get current location
   useEffect(() => {
@@ -30,6 +33,25 @@ export default function MapScreen() {
       setLocation(currentLocation);
     })();
   }, []);
+
+  // Center map on current location
+  const centerOnUserLocation = async () => {
+    if (!mapRef.current) return;
+
+    try {
+      const currentLocation = await Location.getCurrentPositionAsync({});
+      setLocation(currentLocation);
+      
+      mapRef.current.animateToRegion({
+        latitude: currentLocation.coords.latitude,
+        longitude: currentLocation.coords.longitude,
+        latitudeDelta: 0.03,
+        longitudeDelta: 0.03,
+      }, 1000);
+    } catch (error) {
+      console.error("Failed to get current location:", error);
+    }
+  };
 
   // Continue drawing as finger moves
   const handleMapPanDrag = (event: any) => {
@@ -64,6 +86,11 @@ export default function MapScreen() {
     setDrawingMode(false);
   };
 
+  // Toggle events visibility
+  const toggleEventsVisibility = () => {
+    setShowEvents(!showEvents);
+  };
+
   return (
     <View style={styles.container}>
       <StatusBar style={Platform.OS === 'ios' ? 'light' : 'auto'} />
@@ -74,12 +101,12 @@ export default function MapScreen() {
           style={styles.map}
           provider={PROVIDER_GOOGLE}
           showsUserLocation
-          showsMyLocationButton
+          showsMyLocationButton={false}
           initialRegion={{
             latitude: location.coords.latitude,
             longitude: location.coords.longitude,
-            latitudeDelta: 0.0922,
-            longitudeDelta: 0.0421,
+            latitudeDelta: 0.03,
+            longitudeDelta: 0.03,
           }}
           onPanDrag={handleMapPanDrag}
           scrollEnabled={!drawingMode}
@@ -87,6 +114,26 @@ export default function MapScreen() {
           rotateEnabled={!drawingMode}
           pitchEnabled={!drawingMode}
         >
+          {/* Event markers */}
+          {showEvents && events.map(event => event.coordinates && (
+            <Marker
+              key={event.id}
+              coordinate={event.coordinates}
+              title={event.title}
+              description={event.date}
+              pinColor={Colors[colorScheme ?? 'light'].tint}
+            >
+              <Callout tooltip>
+                <View style={styles.calloutView}>
+                  <Text style={styles.calloutTitle}>{event.title}</Text>
+                  <Text style={styles.calloutDetails}>{event.date}</Text>
+                  <Text style={styles.calloutDetails}>{event.location}</Text>
+                  <Text style={styles.calloutDescription}>{event.description}</Text>
+                </View>
+              </Callout>
+            </Marker>
+          ))}
+          
           {/* Current drawing polygon */}
           {polygonCoords.length > 2 && (
             <Polygon
@@ -123,6 +170,16 @@ export default function MapScreen() {
         </View>
       )}
 
+      {/* Custom recenter button */}
+      <TouchableOpacity 
+        style={styles.recenterButton}
+        onPress={centerOnUserLocation}
+      >
+        <View style={styles.recenterButtonInner}>
+          <IconSymbol size={24} name="location.fill" color={Colors[colorScheme ?? 'light'].tint} />
+        </View>
+      </TouchableOpacity>
+
       {/* Drawing mode indicator */}
       {drawingMode && (
         <View style={styles.drawingIndicator}>
@@ -130,6 +187,15 @@ export default function MapScreen() {
           <Text style={styles.drawingHint}>Drag your finger to draw</Text>
         </View>
       )}
+
+      {/* Event toggle button */}
+      <TouchableOpacity 
+        style={[styles.eventToggleButton, { backgroundColor: showEvents ? Colors[colorScheme ?? 'light'].tint : '#808080' }]}
+        onPress={toggleEventsVisibility}
+      >
+        <IconSymbol size={20} name="calendar.badge.clock" color="#fff" />
+        <Text style={styles.eventToggleText}>{showEvents ? 'Hide Events' : 'Show Events'}</Text>
+      </TouchableOpacity>
 
       {/* Drawing controls */}
       <View style={[styles.controlsContainer, { paddingBottom: insets.bottom + 70 }]}>
@@ -230,5 +296,70 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     fontSize: 12,
     marginTop: 4,
+  },
+  calloutView: {
+    backgroundColor: 'white',
+    borderRadius: 8,
+    padding: 10,
+    maxWidth: 200,
+    borderColor: '#ccc',
+    borderWidth: 1,
+  },
+  calloutTitle: {
+    fontWeight: 'bold',
+    fontSize: 16,
+    marginBottom: 4,
+  },
+  calloutDetails: {
+    fontSize: 12,
+    color: '#666',
+  },
+  calloutDescription: {
+    marginTop: 4,
+    fontSize: 12,
+  },
+  eventToggleButton: {
+    position: 'absolute',
+    top: 50,
+    right: 15,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#4C8BF5',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 20,
+    gap: 6,
+  },
+  eventToggleText: {
+    color: 'white',
+    fontWeight: '600',
+    fontSize: 14,
+  },
+  recenterButton: {
+    position: 'absolute',
+    right: 20,
+    bottom: 100,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: 'white',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    elevation: 5,
+  },
+  recenterButtonInner: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'white',
+    alignItems: 'center',
+    justifyContent: 'center',
   }
 });
