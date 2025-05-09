@@ -97,7 +97,7 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 3,
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.1)',
+    borderColor: 'rgba(0, 0, 0, 0.2)',
   },
   image: {
     width: '100%',
