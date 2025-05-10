@@ -1,13 +1,21 @@
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { Colors } from '@/constants/Colors';
-import { useEvents } from '@/context/EventContext';
+import { Event, useEvents } from '@/context/EventContext';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import * as Location from 'expo-location';
 import { StatusBar } from 'expo-status-bar';
 import React, { useEffect, useRef, useState } from 'react';
 import { Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import MapView, { Callout, Marker, Polygon, Polyline, PROVIDER_GOOGLE } from 'react-native-maps';
+import MapView, { Callout, Marker, Polygon, Polyline, PROVIDER_GOOGLE, Region } from 'react-native-maps';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+
+// Interface for clusters
+interface Cluster {
+  id: string;
+  coordinate: { latitude: number; longitude: number };
+  events: Event[];
+  count: number;
+}
 
 export default function MapScreen() {
   const colorScheme = useColorScheme();
@@ -19,7 +27,7 @@ export default function MapScreen() {
   const [savedPolygons, setSavedPolygons] = useState<Array<Array<{ latitude: number; longitude: number }>>>([]);
   const { events } = useEvents();
   const [showEvents, setShowEvents] = useState(true);
-
+  
   // Request location permissions and get current location
   useEffect(() => {
     (async () => {
@@ -31,8 +39,152 @@ export default function MapScreen() {
 
       const currentLocation = await Location.getCurrentPositionAsync({});
       setLocation(currentLocation);
+      
+      // Initialize region based on current location
+      if (currentLocation) {
+        setRegion({
+          latitude: currentLocation.coords.latitude,
+          longitude: currentLocation.coords.longitude,
+          latitudeDelta: 0.03,
+          longitudeDelta: 0.03,
+        });
+      }
     })();
   }, []);
+
+  // New state for clustering
+  const [region, setRegion] = useState<Region>({
+    latitude: 0,
+    longitude: 0,
+    latitudeDelta: 0.03,
+    longitudeDelta: 0.03,
+  });
+  const [clusters, setClusters] = useState<Cluster[]>([]);
+
+  // Calculate distance between two coordinates (Haversine formula)
+  const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: number): number => {
+    const R = 6371; // Radius of the earth in km
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLon = (lon2 - lon1) * Math.PI / 180;
+    const a = 
+      Math.sin(dLat/2) * Math.sin(dLat/2) +
+      Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * 
+      Math.sin(dLon/2) * Math.sin(dLon/2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+    return R * c;
+  };
+
+  // Clustering algorithm
+  const clusterEvents = (currentEvents: any[], delta: number) => {
+    if (!currentEvents || currentEvents.length === 0) return [];
+    
+    // Filter out events without coordinates
+    const validEvents = currentEvents.filter(event => event.coordinates);
+    if (validEvents.length === 0) return [];
+    
+    // Drastically reduced clustering threshold
+    // Below certain zoom levels, disable clustering completely
+    const zoomThreshold = 0.02; // At this zoom level or lower, don't cluster at all
+    
+    // If zoomed in enough, don't cluster at all
+    if (delta <= zoomThreshold) {
+      console.log(`Showing ${validEvents.length} individual markers`); // Debug logging
+      return validEvents.map((event, index) => ({
+        id: `single-${event.id}`,
+        coordinate: { ...event.coordinates },
+        events: [event],
+        count: 1
+      }));
+    }
+    
+    // Otherwise use a very aggressive distance reduction for clustering
+    const clusterDistance = delta * 15; // Drastically reduced from 40
+    
+    const clusters: Cluster[] = [];
+    const processed: {[key: string]: boolean} = {};
+    
+    validEvents.forEach(event => {
+      if (processed[event.id]) return;
+      
+      const cluster: Cluster = {
+        id: `cluster-${clusters.length}`,
+        coordinate: { ...event.coordinates },
+        events: [event],
+        count: 1
+      };
+      
+      processed[event.id] = true;
+      
+      // Find nearby events to add to this cluster
+      validEvents.forEach(otherEvent => {
+        if (processed[otherEvent.id] || otherEvent.id === event.id) return;
+        
+        const distance = calculateDistance(
+          event.coordinates.latitude,
+          event.coordinates.longitude,
+          otherEvent.coordinates.latitude,
+          otherEvent.coordinates.longitude
+        );
+        
+        if (distance <= clusterDistance) {
+          cluster.events.push(otherEvent);
+          cluster.count++;
+          processed[otherEvent.id] = true;
+          
+          // Recalculate the center of the cluster (average of all coordinates)
+          const totalLat = cluster.events.reduce((sum, e) => sum + e.coordinates.latitude, 0);
+          const totalLng = cluster.events.reduce((sum, e) => sum + e.coordinates.longitude, 0);
+          cluster.coordinate = {
+            latitude: totalLat / cluster.events.length,
+            longitude: totalLng / cluster.events.length
+          };
+        }
+      });
+      
+      clusters.push(cluster);
+    });
+    
+    return clusters;
+  };
+
+  // Handle region change and recalculate clusters
+  const onRegionChange = (newRegion: Region) => {
+    setRegion(newRegion);
+
+    if (showEvents && events.length > 0) {
+      const newClusters = clusterEvents(events, newRegion.latitudeDelta);
+      setClusters(newClusters);
+    }
+  };
+
+  // Handle cluster press - zoom in if multiple events
+  const handleClusterPress = (cluster: Cluster) => {
+    if (!mapRef.current || cluster.count <= 1) return;
+    
+    // Zoom in to see individual events
+    mapRef.current.animateToRegion({
+      latitude: cluster.coordinate.latitude,
+      longitude: cluster.coordinate.longitude,
+      latitudeDelta: Math.max(region.latitudeDelta / 10, 0.005),
+      longitudeDelta: Math.max(region.longitudeDelta / 10, 0.005),
+    }, 300);
+    onRegionChange({
+      latitude: cluster.coordinate.latitude,
+      longitude: cluster.coordinate.longitude,
+      latitudeDelta: Math.max(region.latitudeDelta / 10, 0.005),
+      longitudeDelta: Math.max(region.longitudeDelta / 10, 0.005),
+    });
+  };
+
+  // Update clusters when events, showEvents, or region changes
+  useEffect(() => {
+    if (showEvents && events.length > 0) {
+      const newClusters = clusterEvents(events, region.latitudeDelta);
+      setClusters(newClusters);
+    } else {
+      setClusters([]);
+    }
+  }, [showEvents, events, region]);
 
   // Center map on current location
   const centerOnUserLocation = async () => {
@@ -42,12 +194,15 @@ export default function MapScreen() {
       const currentLocation = await Location.getCurrentPositionAsync({});
       setLocation(currentLocation);
       
-      mapRef.current.animateToRegion({
+      const newRegion = {
         latitude: currentLocation.coords.latitude,
         longitude: currentLocation.coords.longitude,
         latitudeDelta: 0.03,
         longitudeDelta: 0.03,
-      }, 1000);
+      };
+      
+      setRegion(newRegion);
+      mapRef.current.animateToRegion(newRegion, 1000);
     } catch (error) {
       console.error("Failed to get current location:", error);
     }
@@ -108,29 +263,53 @@ export default function MapScreen() {
             latitudeDelta: 0.03,
             longitudeDelta: 0.03,
           }}
+          onRegionChangeComplete={onRegionChange}
           onPanDrag={handleMapPanDrag}
           scrollEnabled={!drawingMode}
           zoomEnabled={!drawingMode}
           rotateEnabled={!drawingMode}
           pitchEnabled={!drawingMode}
         >
-          {/* Event markers */}
-          {showEvents && events.map(event => event.coordinates && (
+          {/* Event markers and clusters */}
+          {showEvents && clusters.map(cluster => (
             <Marker
-              key={event.id}
-              coordinate={event.coordinates}
-              title={event.title}
-              description={event.date}
-              pinColor={Colors[colorScheme ?? 'light'].tint}
+              key={cluster.id}
+              coordinate={cluster.coordinate}
+              onPress={() => handleClusterPress(cluster)}
             >
-              <Callout tooltip>
-                <View style={styles.calloutView}>
-                  <Text style={styles.calloutTitle}>{event.title}</Text>
-                  <Text style={styles.calloutDetails}>{event.date}</Text>
-                  <Text style={styles.calloutDetails}>{event.location}</Text>
-                  <Text style={styles.calloutDescription}>{event.description}</Text>
+              {cluster.count > 1 ? (
+                // Updated cluster marker with size based on count
+                <View style={[
+                  styles.clusterMarker,
+                  { 
+                    backgroundColor: Colors[colorScheme ?? 'light'].tint,
+                    // Make larger clusters visually bigger
+                    width: Math.min(40 + (cluster.count * 2), 70),
+                    height: Math.min(40 + (cluster.count * 2), 70),
+                    // Expand border radius to maintain circular shape
+                    borderRadius: Math.min(20 + (cluster.count * 1), 35),
+                  }
+                ]}>
+                  <Text style={styles.clusterText}>{cluster.count}</Text>
                 </View>
-              </Callout>
+              ) : (
+                // Single event marker with improved visibility
+                <>
+                  <View style={styles.markerContainer}>
+                    <View style={[
+                      styles.marker,
+                      { backgroundColor: Colors[colorScheme ?? 'light'].tint }
+                    ]} />
+                  </View>
+                  <Callout tooltip>
+                    <View style={styles.calloutView}>
+                      {/* <Text style={styles.calloutTitle}>{cluster.events[0].title}</Text>
+                      <Text style={styles.calloutDetails}>{cluster.events[0].location}</Text>
+                      <Text style={styles.calloutDescription}>{cluster.events[0].description}</Text> */}
+                    </View>
+                  </Callout>
+                </>
+              )}
             </Marker>
           ))}
           
@@ -361,5 +540,42 @@ const styles = StyleSheet.create({
     backgroundColor: 'white',
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  // New styles for clustering
+  clusterMarker: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: 'white',
+    // Add shadow for better visibility
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.3,
+    shadowRadius: 2,
+    elevation: 3,
+  },
+  clusterText: {
+    color: 'white',
+    fontWeight: 'bold',
+    fontSize: 16,
+  },
+  markerContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  marker: {
+    width: 24, // Slightly larger individual markers
+    height: 24,
+    borderRadius: 12,
+    borderWidth: 2,
+    borderColor: 'white',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.3,
+    shadowRadius: 2,
+    elevation: 3,
   }
 });
