@@ -186,7 +186,7 @@ export const SAMPLE_EVENTS: Event[] = [
       onSiteAvailable: true
     },
     coordinates: {
-      latitude: 48.816607,
+      latitude: 48.716607,
       longitude: 9.025166,
     },
     image: 'https://www.herechattanooga.com/wp-content/uploads/2025/02/ishmael-reed-event.webp.webp'

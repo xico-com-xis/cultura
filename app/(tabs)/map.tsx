@@ -1,6 +1,6 @@
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { Colors } from '@/constants/Colors';
-import { Event, useEvents } from '@/context/EventContext';
+import { Event, EventType, useEvents } from '@/context/EventContext';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import * as Location from 'expo-location';
 import { StatusBar } from 'expo-status-bar';
@@ -27,6 +27,8 @@ export default function MapScreen() {
   const [savedPolygons, setSavedPolygons] = useState<Array<Array<{ latitude: number; longitude: number }>>>([]);
   const { events } = useEvents();
   const [showEvents, setShowEvents] = useState(true);
+  const [useEventFilters, setUseEventFilters] = useState(true);
+  const [selectedEventType, setSelectedEventType] = useState<EventType | 'all'>('all');
   
   // Request location permissions and get current location
   useEffect(() => {
@@ -61,18 +63,7 @@ export default function MapScreen() {
   });
   const [clusters, setClusters] = useState<Cluster[]>([]);
 
-  // Calculate distance between two coordinates (Haversine formula)
-  const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: number): number => {
-    const R = 6371; // Radius of the earth in km
-    const dLat = (lat2 - lat1) * Math.PI / 180;
-    const dLon = (lon2 - lon1) * Math.PI / 180;
-    const a = 
-      Math.sin(dLat/2) * Math.sin(dLat/2) +
-      Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * 
-      Math.sin(dLon/2) * Math.sin(dLon/2);
-    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-    return R * c;
-  };
+
 
   // Clustering algorithm
   const clusterEvents = (currentEvents: any[], delta: number) => {
@@ -82,8 +73,6 @@ export default function MapScreen() {
     const validEvents = currentEvents.filter(event => event.coordinates);
     if (validEvents.length === 0) return [];
     
-    // Drastically reduced clustering threshold
-    // Below certain zoom levels, disable clustering completely
     const zoomThreshold = 0.02; // At this zoom level or lower, don't cluster at all
     
     // If zoomed in enough, don't cluster at all
@@ -146,17 +135,6 @@ export default function MapScreen() {
     
     return clusters;
   };
-
-  // Handle region change and recalculate clusters
-  const onRegionChange = (newRegion: Region) => {
-    setRegion(newRegion);
-
-    if (showEvents && events.length > 0) {
-      const newClusters = clusterEvents(events, newRegion.latitudeDelta);
-      setClusters(newClusters);
-    }
-  };
-
   // Handle cluster press - zoom in if multiple events
   const handleClusterPress = (cluster: Cluster) => {
     if (!mapRef.current || cluster.count <= 1) return;
@@ -176,6 +154,30 @@ export default function MapScreen() {
     });
   };
 
+
+  // Handle region change - update clusters
+  const onRegionChange = (newRegion: Region) => {
+    setRegion(newRegion);
+
+    if (showEvents && events.length > 0) {
+      // Apply the same filtering logic as in the useEffect
+      let eventsToCluster = events;
+      
+      // Apply event type filter if filters are enabled
+      if (useEventFilters && selectedEventType !== 'all') {
+        eventsToCluster = eventsToCluster.filter(event => event.type === selectedEventType);
+      }
+      
+      // Apply location filter
+      if (useEventFilters) {
+        eventsToCluster = eventsToCluster.filter((_, index) => index % 2 === 0);
+      }
+      
+      const newClusters = clusterEvents(eventsToCluster, newRegion.latitudeDelta);
+      setClusters(newClusters);
+    }
+  };
+
   // Update clusters when events, showEvents, or region changes
   useEffect(() => {
     if (showEvents && events.length > 0) {
@@ -185,6 +187,48 @@ export default function MapScreen() {
       setClusters([]);
     }
   }, [showEvents, events, region]);
+
+  useEffect(() => {
+    if (showEvents) { 
+      let filteredEvents = events;
+      
+      // Apply event type filter if filters are enabled
+      if (useEventFilters && selectedEventType !== 'all') {
+        filteredEvents = filteredEvents.filter(event => event.type === selectedEventType);
+      }
+      
+      // Apply location filter (simplified version like in events.tsx)
+      // You could implement actual geo-filtering here
+      if (useEventFilters) {
+        filteredEvents = filteredEvents.filter((_, index) => index % 2 === 0);
+      }
+      
+      const newClusters = clusterEvents(filteredEvents, region.latitudeDelta);
+      setClusters(newClusters);
+    } else {
+      setClusters([]);
+    }
+  }, [showEvents, events, region, useEventFilters, selectedEventType]);
+
+  // Toggle filters application
+  const toggleEventFilters = () => {
+    setUseEventFilters(!useEventFilters);
+  };
+
+  const handleIndividualEventPress = (event: Event) => {
+    console.log('Individual event pressed:', event);
+    console.log('Individual event pressed:', event.title);
+    console.log('Individual event pressed:', event.description);
+    console.log('Individual event pressed:', event.location);
+    
+    // You can add more functionality here, like:
+    // - Navigate to event details page
+    // - Show more information in a modal
+    // - Highlight the event on the map
+  };
+
+
+
 
   // Center map on current location
   const centerOnUserLocation = async () => {
@@ -246,6 +290,23 @@ export default function MapScreen() {
     setShowEvents(!showEvents);
   };
 
+  // Calculate distance between two coordinates (Haversine formula)
+  const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: number): number => {
+    const R = 6371; // Radius of the earth in km
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLon = (lon2 - lon1) * Math.PI / 180;
+    const a = 
+      Math.sin(dLat/2) * Math.sin(dLat/2) +
+      Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * 
+      Math.sin(dLon/2) * Math.sin(dLon/2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+    return R * c;
+  };
+
+
+
+
+
   return (
     <View style={styles.container}>
       <StatusBar style={Platform.OS === 'ios' ? 'light' : 'auto'} />
@@ -275,40 +336,40 @@ export default function MapScreen() {
             <Marker
               key={cluster.id}
               coordinate={cluster.coordinate}
-              onPress={() => handleClusterPress(cluster)}
+              pinColor={cluster.count === 1 ? Colors[colorScheme ?? 'light'].tint : undefined}
+              onPress={() => cluster.count > 1 
+                ? handleClusterPress(cluster) 
+                : handleIndividualEventPress(cluster.events[0])
+              }
             >
               {cluster.count > 1 ? (
-                // Updated cluster marker with size based on count
+                // Cluster marker stays the same
                 <View style={[
                   styles.clusterMarker,
                   { 
                     backgroundColor: Colors[colorScheme ?? 'light'].tint,
-                    // Make larger clusters visually bigger
                     width: Math.min(40 + (cluster.count * 2), 70),
                     height: Math.min(40 + (cluster.count * 2), 70),
-                    // Expand border radius to maintain circular shape
                     borderRadius: Math.min(20 + (cluster.count * 1), 35),
                   }
                 ]}>
                   <Text style={styles.clusterText}>{cluster.count}</Text>
                 </View>
               ) : (
-                // Single event marker with improved visibility
-                <>
-                  <View style={styles.markerContainer}>
-                    <View style={[
-                      styles.marker,
-                      { backgroundColor: Colors[colorScheme ?? 'light'].tint }
-                    ]} />
+                // Just use the default pin with the callout
+                <Callout tooltip>
+                  <View style={styles.calloutView}>
+                    <Text style={styles.calloutTitle}>
+                      {cluster.events[0]?.title || 'Event'}
+                    </Text>
+                    <Text style={styles.calloutDetails}>
+                      {cluster.events[0]?.location || 'Location not specified'}
+                    </Text>
+                    <Text style={styles.calloutDescription}>
+                      {cluster.events[0]?.description || 'No description available'}
+                    </Text>
                   </View>
-                  <Callout tooltip>
-                    <View style={styles.calloutView}>
-                      {/* <Text style={styles.calloutTitle}>{cluster.events[0].title}</Text>
-                      <Text style={styles.calloutDetails}>{cluster.events[0].location}</Text>
-                      <Text style={styles.calloutDescription}>{cluster.events[0].description}</Text> */}
-                    </View>
-                  </Callout>
-                </>
+                </Callout>
               )}
             </Marker>
           ))}
@@ -369,19 +430,17 @@ export default function MapScreen() {
 
       {/* Event toggle button */}
       <TouchableOpacity 
-        style={[styles.eventToggleButton, { backgroundColor: showEvents ? Colors[colorScheme ?? 'light'].tint : '#808080' }]}
+        style={[styles.eventToggleButton, { backgroundColor: showEvents ? '#808080' : Colors[colorScheme ?? 'light'].tint }]}
         onPress={toggleEventsVisibility}
       >
         <IconSymbol size={20} name="calendar.badge.clock" color="#fff" />
-        <Text style={styles.eventToggleText}>{showEvents ? 'Hide Events' : 'Show Events'}</Text>
+        <Text style={styles.eventToggleText}>{showEvents ? 'Hide events' : 'Events Hiden'}</Text>
       </TouchableOpacity>
 
       {/* Drawing controls */}
       <View style={[styles.controlsContainer, { paddingBottom: insets.bottom + 70 }]}>
-        <TouchableOpacity
-          style={[
-            styles.controlButton,
-            { backgroundColor: drawingMode ? 'rgba(255,0,0,0.2)' : Colors[colorScheme ?? 'light'].tabIconDefault }
+        <TouchableOpacity style={[styles.controlButton,
+          {backgroundColor: drawingMode ? 'rgba(255,0,0,0.2)' : Colors[colorScheme ?? 'light'].tabIconDefault}
           ]}
           onPress={toggleDrawingMode}
         >
@@ -415,6 +474,21 @@ export default function MapScreen() {
           </TouchableOpacity>
         )}
       </View>
+
+      {/* Event filter toggle button */}
+      <TouchableOpacity
+        style={[
+          styles.filterToggleButton, 
+          { backgroundColor: useEventFilters ? Colors[colorScheme ?? 'light'].tint : '#808080' }
+        ]}
+        onPress={toggleEventFilters}
+      >
+        <IconSymbol size={20} name="line.3.horizontal.decrease" color="#fff" />
+        <Text style={styles.eventToggleText}>
+          {useEventFilters ? 'Filters On' : 'Filters Off'}
+        </Text>
+      </TouchableOpacity>
+
     </View>
   );
 }
@@ -479,23 +553,37 @@ const styles = StyleSheet.create({
   calloutView: {
     backgroundColor: 'white',
     borderRadius: 8,
-    padding: 10,
-    maxWidth: 200,
+    padding: 12,
+    minWidth: 200,
+    width: 250,
+    maxWidth: 300,
     borderColor: '#ccc',
     borderWidth: 1,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 2,
+    elevation: 3,
   },
   calloutTitle: {
     fontWeight: 'bold',
     fontSize: 16,
-    marginBottom: 4,
+    marginBottom: 6,
+    flexWrap: 'wrap',
   },
   calloutDetails: {
-    fontSize: 12,
-    color: '#666',
+    fontSize: 13,
+    color: '#444',
+    marginBottom: 4,
+    flexWrap: 'wrap',
   },
   calloutDescription: {
     marginTop: 4,
     fontSize: 12,
+    color: '#666',
+    flexWrap: 'wrap',  
+    lineHeight: 18,
+    maxHeight: 72,     
   },
   eventToggleButton: {
     position: 'absolute',
@@ -541,7 +629,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  // New styles for clustering
   clusterMarker: {
     width: 40,
     height: 40,
@@ -550,7 +637,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     borderWidth: 2,
     borderColor: 'white',
-    // Add shadow for better visibility
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.3,
@@ -567,7 +653,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   marker: {
-    width: 24, // Slightly larger individual markers
+    width: 24,
     height: 24,
     borderRadius: 12,
     borderWidth: 2,
@@ -577,5 +663,16 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.3,
     shadowRadius: 2,
     elevation: 3,
+  },
+  filterToggleButton: {
+    position: 'absolute',
+    top: 50,
+    left: 15,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 20,
+    gap: 6,
   }
 });
