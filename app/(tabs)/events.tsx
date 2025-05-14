@@ -25,34 +25,34 @@ const eventTypeOptions: Array<{ type: EventType | 'all'; label: string; icon: st
 ];
 
 export default function EventsScreen() {
-  const { events } = useEvents();
+  // Use filtered events and filter methods from context
+  const { filteredEvents, filters, setSelectedTypes, setMapFilterEnabled } = useEvents();
   const colorScheme = useColorScheme();
-  const [selectedTypes, setSelectedTypes] = useState<Array<EventType | 'all'>>(['all']);
-  const [mapFilterEnabled, setMapFilterEnabled] = useState(true);
   const [filterModalVisible, setFilterModalVisible] = useState(false);
   
   // Add temporary state variables for the modal
   const [tempSelectedTypes, setTempSelectedTypes] = useState<Array<EventType | 'all'>>(['all']);
   const [tempMapFilterEnabled, setTempMapFilterEnabled] = useState(true);
   
-  // Sort events by earliest date first
-  const sortedEvents = [...events].sort((a, b) => {
-    const aDate = a.schedule && a.schedule.length > 0 ? new Date(a.schedule[0].date) : new Date();
-    const bDate = b.schedule && b.schedule.length > 0 ? new Date(b.schedule[0].date) : new Date();
-    return aDate.getTime() - bDate.getTime();
-  });
+  // Update temporary filter states when modal opens
+  const openFilterModal = () => {
+    setTempSelectedTypes([...filters.selectedTypes]);
+    setTempMapFilterEnabled(filters.mapFilterEnabled);
+    setFilterModalVisible(true);
+  };
   
-  // Filter events by type
-  const displayedEvents = sortedEvents.filter(event => {
-    // Type filter: event passes if 'all' is selected or its type is in selectedTypes
-    const passesTypeFilter = selectedTypes.includes('all') || selectedTypes.includes(event.type);
-    
-    // Map filter: when enabled, use distance-based filtering (currently mocked with index % 2)
-    const passesMapFilter = !mapFilterEnabled || (event.id.charCodeAt(0) % 2 === 0); // Mock implementation
-    
-    // Event must pass BOTH filters (AND logic)
-    return passesTypeFilter && passesMapFilter;
-  });
+  // Apply filters and close modal
+  const applyFilters = () => {
+    setSelectedTypes([...tempSelectedTypes]);
+    setMapFilterEnabled(tempMapFilterEnabled);
+    setFilterModalVisible(false);
+  };
+  
+  // Check if filters are active
+  const areFiltersActive = () => {
+    return !(filters.selectedTypes.length === 1 && filters.selectedTypes.includes('all')) || 
+           filters.mapFilterEnabled;
+  };
   
   return (
     <ThemedView style={styles.container}>
@@ -61,24 +61,20 @@ export default function EventsScreen() {
           {/* Filter button */}
           <TouchableOpacity 
             style={[
-                  styles.filterButton,
-                  // Apply colored background when any filter is active
-                  (!(selectedTypes.length === 1 && selectedTypes.includes('all')) || mapFilterEnabled) && {
-                    backgroundColor: Colors[colorScheme ?? 'light'].tint,
-                    borderColor: Colors[colorScheme ?? 'light'].tint,
-                  }
-                ]}
-                onPress={() => {
-                  setFilterModalVisible(true);
-                  setTempSelectedTypes([...selectedTypes]);
-                  setTempMapFilterEnabled(mapFilterEnabled);
-                }}
+              styles.filterButton,
+              // Apply colored background when any filter is active
+              areFiltersActive() && {
+                backgroundColor: Colors[colorScheme ?? 'light'].tint,
+                borderColor: Colors[colorScheme ?? 'light'].tint,
+              }
+            ]}
+            onPress={openFilterModal}
           >
             <IconSymbol 
               name="line.3.horizontal.decrease" 
               size={20} 
               // Change icon color to white when filters are active
-              color={(!(selectedTypes.length === 1 && selectedTypes.includes('all')) || mapFilterEnabled) 
+              color={areFiltersActive() 
                 ? '#fff' 
                 : Colors[colorScheme ?? 'light'].text} 
             />
@@ -86,7 +82,7 @@ export default function EventsScreen() {
               style={[
                 styles.filterButtonText,
                 // Change text color to white when filters are active
-                (!(selectedTypes.length === 1 && selectedTypes.includes('all')) || mapFilterEnabled) && { color: '#fff' }
+                areFiltersActive() && { color: '#fff' }
               ]}
             >
               Filter
@@ -96,7 +92,7 @@ export default function EventsScreen() {
       </ThemedView>
       
       <FlatList
-        data={displayedEvents}
+        data={filteredEvents}
         renderItem={({ item }) => (
           <EventCard event={item} />
         )}
@@ -131,10 +127,8 @@ export default function EventsScreen() {
             <View style={styles.modalHeader}>
               <ThemedText type="title" style={styles.modalTitle}>Filter Events</ThemedText>
               <TouchableOpacity 
-                style={[styles.filterButton,]}
-                onPress={() => {
-                  setFilterModalVisible(false);
-                }}
+                style={styles.filterButton}
+                onPress={() => setFilterModalVisible(false)}
               >
                 <IconSymbol name="xmark" size={24} color={Colors[colorScheme ?? 'light'].text} />
               </TouchableOpacity>
@@ -227,12 +221,7 @@ export default function EventsScreen() {
             {/* Apply Button */}
             <TouchableOpacity 
               style={styles.applyButton}
-              onPress={() => {
-                // Apply temporary values to actual filters
-                setSelectedTypes([...tempSelectedTypes]);
-                setMapFilterEnabled(tempMapFilterEnabled);
-                setFilterModalVisible(false);
-              }}
+              onPress={applyFilters}
             >
               <ThemedText style={styles.applyButtonText}>Apply Filters</ThemedText>
             </TouchableOpacity>

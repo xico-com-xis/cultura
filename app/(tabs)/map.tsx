@@ -30,7 +30,7 @@ export default function MapScreen() {
   const [useEventFilters, setUseEventFilters] = useState(true);
   const [selectedEventType, setSelectedEventType] = useState<EventType | 'all'>('all');
   
-  // Request location permissions and get current location
+  //Request location permissions and get current location
   useEffect(() => {
     (async () => {
       const { status } = await Location.requestForegroundPermissionsAsync();

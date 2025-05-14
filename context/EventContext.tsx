@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState } from 'react';
+import React, { createContext, useContext, useMemo, useState } from 'react';
 
 // Define event types
 export type EventType = 'music' | 'art' | 'theater' | 'dance' | 'workshop' | 'festival' | 'exhibition' | 'film' | 'literature' | 'other';
@@ -193,19 +193,76 @@ export const SAMPLE_EVENTS: Event[] = [
   }
 ];
 
+// Define filter state type
+type FilterState = {
+  selectedTypes: Array<EventType | 'all'>;
+  mapFilterEnabled: boolean;
+};
+
 // Create context
 type EventContextType = {
   events: Event[];
   setEvents: React.Dispatch<React.SetStateAction<Event[]>>;
+  // Add filter-related properties
+  filters: FilterState;
+  setSelectedTypes: (types: Array<EventType | 'all'>) => void;
+  setMapFilterEnabled: (enabled: boolean) => void;
+  filteredEvents: Event[]; // Pre-filtered events based on current filters
 };
 
 const EventContext = createContext<EventContextType | undefined>(undefined);
 
 export const EventProvider: React.FC<{children: React.ReactNode}> = ({ children }) => {
   const [events, setEvents] = useState<Event[]>(SAMPLE_EVENTS);
+  
+  // Add filter state
+  const [filters, setFilters] = useState<FilterState>({
+    selectedTypes: ['all'],
+    mapFilterEnabled: true
+  });
+
+  // Filter update methods
+  const setSelectedTypes = (types: Array<EventType | 'all'>) => {
+    setFilters(prev => ({ ...prev, selectedTypes: types }));
+  };
+
+  const setMapFilterEnabled = (enabled: boolean) => {
+    setFilters(prev => ({ ...prev, mapFilterEnabled: enabled }));
+  };
+
+  // Calculate filtered events (memoized to prevent unnecessary recalculations)
+  const filteredEvents = useMemo(() => {
+    // Sort events by earliest date first
+    const sortedEvents = [...events].sort((a, b) => {
+      const aDate = a.schedule && a.schedule.length > 0 ? new Date(a.schedule[0].date) : new Date();
+      const bDate = b.schedule && b.schedule.length > 0 ? new Date(b.schedule[0].date) : new Date();
+      return aDate.getTime() - bDate.getTime();
+    });
+    
+    // Filter events
+    return sortedEvents.filter(event => {
+      // Type filter: event passes if 'all' is selected or its type is in selectedTypes
+      const passesTypeFilter = filters.selectedTypes.includes('all') || 
+                              filters.selectedTypes.includes(event.type);
+      
+      // Map filter: when enabled, use distance-based filtering (mocked implementation)
+      const passesMapFilter = !filters.mapFilterEnabled || 
+                             (event.id.charCodeAt(0) % 2 === 0); // Mock implementation
+      
+      // Event must pass BOTH filters
+      return passesTypeFilter && passesMapFilter;
+    });
+  }, [events, filters.selectedTypes, filters.mapFilterEnabled]);
 
   return (
-    <EventContext.Provider value={{ events, setEvents }}>
+    <EventContext.Provider value={{ 
+      events, 
+      setEvents, 
+      filters,
+      setSelectedTypes,
+      setMapFilterEnabled,
+      filteredEvents
+    }}>
       {children}
     </EventContext.Provider>
   );
