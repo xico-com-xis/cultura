@@ -33,6 +33,12 @@ export default function EventsScreen() {
   // Add temporary state variables for the modal
   const [tempSelectedTypes, setTempSelectedTypes] = useState<Array<EventType | 'all'>>(['all']);
   const [tempMapFilterEnabled, setTempMapFilterEnabled] = useState(true);
+
+  const [mapModalVisible, setMapModalVisible] = useState(false);
+
+  const openMapModal = () => {
+    setMapModalVisible(true);
+  };
   
   // Update temporary filter states when modal opens
   const openFilterModal = () => {
@@ -61,7 +67,7 @@ export default function EventsScreen() {
           {/* Filter button */}
           <TouchableOpacity 
             style={[
-              styles.filterButton,
+              styles.filterButtonType,
               // Apply colored background when any filter is active
               areFiltersActive() && {
                 backgroundColor: Colors[colorScheme ?? 'light'].tint,
@@ -85,8 +91,23 @@ export default function EventsScreen() {
                 areFiltersActive() && { color: '#fff' }
               ]}
             >
-              Filter
+              Categoria
             </ThemedText>
+          </TouchableOpacity>
+
+          {/* Map button */}
+          <TouchableOpacity 
+            style={styles.filterButtonMap}
+            onPress={openMapModal}
+          >
+            <ThemedText style={styles.filterButtonText}>
+              Zona
+            </ThemedText>
+            <IconSymbol 
+              name="line.3.horizontal.decrease" 
+              size={20} 
+              color={Colors[colorScheme ?? 'light'].text} 
+            />
           </TouchableOpacity>
         </View>
       </ThemedView>
@@ -127,7 +148,7 @@ export default function EventsScreen() {
             <View style={styles.modalHeader}>
               <ThemedText type="title" style={styles.modalTitle}>Filter Events</ThemedText>
               <TouchableOpacity 
-                style={styles.filterButton}
+                style={styles.typeButton}
                 onPress={() => setFilterModalVisible(false)}
               >
                 <IconSymbol name="xmark" size={24} color={Colors[colorScheme ?? 'light'].text} />
@@ -228,6 +249,34 @@ export default function EventsScreen() {
           </ThemedView>
         </View>
       </Modal>
+
+      {/* Map Modal */}
+      <Modal
+        animationType="slide"
+        transparent={true}
+        visible={mapModalVisible}
+        onRequestClose={() => setMapModalVisible(false)}
+      >
+        <View style={styles.modalContainer}>
+          <ThemedView style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <ThemedText type="title" style={styles.modalTitle}>Event Map</ThemedText>
+              <TouchableOpacity 
+                style={styles.typeButton}
+                onPress={() => setMapModalVisible(false)}
+              >
+                <IconSymbol name="xmark" size={24} color={Colors[colorScheme ?? 'light'].text} />
+              </TouchableOpacity>
+            </View>
+            
+            {/* Map content placeholder */}
+            <ThemedView style={styles.mapContainer}>
+              <ThemedText style={styles.mapPlaceholder}>Map will be displayed here</ThemedText>
+            </ThemedView>
+          </ThemedView>
+        </View>
+      </Modal>
+
     </ThemedView>
   );
 }
@@ -243,24 +292,42 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 16,
     marginTop: 40,
+    width: '100%', // Ensure header takes full width
   },
   headerActions: {
     flexDirection: 'row',
     alignItems: 'center',
   },
-  filterButton: {
+  filterButtonType: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderRadius: 20,
+    borderTopRightRadius: 0,
+    borderBottomRightRadius: 1,
     borderWidth: 1,
-    borderColor: 'rgba(0, 0, 0, 0.1)',
-    marginRight: 8,
+    borderRightWidth: 0,
+    width: 110,
+  },
+  filterButtonMap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 20,
+    borderTopLeftRadius: 0,
+    borderBottomLeftRadius: 2,
+    borderWidth: 1,
+    marginLeft: -1, 
+    width: 110,
   },
   filterButtonText: {
     fontSize: 14,
     marginLeft: 6,
+    marginRight: 6,
   },
   listContent: {
     paddingBottom: 20,
@@ -302,6 +369,16 @@ const styles = StyleSheet.create({
   },
   modalTitle: {
     fontSize: 18,
+  },
+  typeButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(0, 0, 0, 0.1)',
+    marginRight: 8,
   },
   filterSectionTitle: {
     fontSize: 16,
@@ -348,5 +425,17 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 16,
     fontWeight: 'bold',
+  },
+  mapContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    height: 400,
+    borderRadius: 8,
+    backgroundColor: 'rgba(0, 0, 0, 0.05)',
+    marginBottom: 20,
+  },
+  mapPlaceholder: {
+    opacity: 0.6,
   },
 });

@@ -1,6 +1,6 @@
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { Colors } from '@/constants/Colors';
-import { Event, EventType, useEvents } from '@/context/EventContext';
+import { Event, useEvents } from '@/context/EventContext';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import * as Location from 'expo-location';
 import { StatusBar } from 'expo-status-bar';
@@ -25,10 +25,9 @@ export default function MapScreen() {
   const [drawingMode, setDrawingMode] = useState(false);
   const [polygonCoords, setPolygonCoords] = useState<Array<{ latitude: number; longitude: number }>>([]);
   const [savedPolygons, setSavedPolygons] = useState<Array<Array<{ latitude: number; longitude: number }>>>([]);
-  const { events } = useEvents();
+  const { events, filteredEvents, filters, setMapFilterEnabled } = useEvents();
   const [showEvents, setShowEvents] = useState(true);
   const [useEventFilters, setUseEventFilters] = useState(true);
-  const [selectedEventType, setSelectedEventType] = useState<EventType | 'all'>('all');
   
   //Request location permissions and get current location
   useEffect(() => {
@@ -160,19 +159,7 @@ export default function MapScreen() {
     setRegion(newRegion);
 
     if (showEvents && events.length > 0) {
-      // Apply the same filtering logic as in the useEffect
-      let eventsToCluster = events;
-      
-      // Apply event type filter if filters are enabled
-      if (useEventFilters && selectedEventType !== 'all') {
-        eventsToCluster = eventsToCluster.filter(event => event.type === selectedEventType);
-      }
-      
-      // Apply location filter
-      if (useEventFilters) {
-        eventsToCluster = eventsToCluster.filter((_, index) => index % 2 === 0);
-      }
-      
+      const eventsToCluster = useEventFilters ? filteredEvents : events;
       const newClusters = clusterEvents(eventsToCluster, newRegion.latitudeDelta);
       setClusters(newClusters);
     }
@@ -190,29 +177,23 @@ export default function MapScreen() {
 
   useEffect(() => {
     if (showEvents) { 
-      let filteredEvents = events;
-      
-      // Apply event type filter if filters are enabled
-      if (useEventFilters && selectedEventType !== 'all') {
-        filteredEvents = filteredEvents.filter(event => event.type === selectedEventType);
-      }
-      
-      // Apply location filter (simplified version like in events.tsx)
-      // You could implement actual geo-filtering here
-      if (useEventFilters) {
-        filteredEvents = filteredEvents.filter((_, index) => index % 2 === 0);
-      }
-      
-      const newClusters = clusterEvents(filteredEvents, region.latitudeDelta);
+      // Use either all events or the filtered events based on the filter toggle
+      const eventsToCluster = useEventFilters ? filteredEvents : events;
+      const newClusters = clusterEvents(eventsToCluster, region.latitudeDelta);
       setClusters(newClusters);
     } else {
       setClusters([]);
     }
-  }, [showEvents, events, region, useEventFilters, selectedEventType]);
+  }, [showEvents, events, filteredEvents, region, useEventFilters]);
 
   // Toggle filters application
   const toggleEventFilters = () => {
     setUseEventFilters(!useEventFilters);
+    // Also sync with EventContext - this will update filteredEvents
+    if (!useEventFilters) {
+      // When turning ON filters, make sure map filter is enabled in context
+      setMapFilterEnabled(true);
+    }
   };
 
   const handleIndividualEventPress = (event: Event) => {
