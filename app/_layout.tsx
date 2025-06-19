@@ -4,7 +4,7 @@ import { Redirect, Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import 'react-native-reanimated';
 
-import { EventProvider } from '@/context/EventContext';
+import { EventProvider } from '@/context/EventsContext';
 import { useColorScheme } from '@/hooks/useColorScheme';
 
 export default function RootLayout() {

@@ -6,7 +6,7 @@ import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { Colors } from '@/constants/Colors';
-import { EventType, useEvents } from '@/context/EventContext';
+import { EventType, useEvents } from '@/context/EventsContext';
 import { useColorScheme } from '@/hooks/useColorScheme';
 
 // Event type options with emoji icons
@@ -32,25 +32,23 @@ export default function EventsScreen() {
   
   // Add temporary state variables for the modal
   const [tempSelectedTypes, setTempSelectedTypes] = useState<Array<EventType | 'all'>>(['all']);
-  const [tempMapFilterEnabled, setTempMapFilterEnabled] = useState(true);
 
   const [mapModalVisible, setMapModalVisible] = useState(false);
 
   const openMapModal = () => {
     setMapModalVisible(true);
+    setMapFilterEnabled(filters.mapFilterEnabled);
   };
   
   // Update temporary filter states when modal opens
   const openFilterModal = () => {
     setTempSelectedTypes([...filters.selectedTypes]);
-    setTempMapFilterEnabled(filters.mapFilterEnabled);
     setFilterModalVisible(true);
   };
   
   // Apply filters and close modal
   const applyFilters = () => {
     setSelectedTypes([...tempSelectedTypes]);
-    setMapFilterEnabled(tempMapFilterEnabled);
     setFilterModalVisible(false);
   };
   
@@ -211,33 +209,6 @@ export default function EventsScreen() {
                 </TouchableOpacity>
               ))}
             </View>
-            
-            {/* Location Filter */}
-            <ThemedText style={styles.filterSectionTitle}>Location</ThemedText>
-            <TouchableOpacity 
-              style={[
-                styles.toggleOption,
-                tempMapFilterEnabled && {
-                  backgroundColor: Colors[colorScheme ?? 'light'].tint,
-                  borderColor: Colors[colorScheme ?? 'light'].tint,
-                }
-              ]}
-              onPress={() => setTempMapFilterEnabled(!tempMapFilterEnabled)}
-            >
-              <IconSymbol 
-                name="mappin.and.ellipse" 
-                size={18} 
-                color={tempMapFilterEnabled ? '#fff' : Colors[colorScheme ?? 'light'].text} 
-              />
-              <ThemedText 
-                style={[
-                  styles.toggleOptionText,
-                  tempMapFilterEnabled && { color: '#fff' }
-                ]}
-              >
-                Show nearby events only (15km radius)
-              </ThemedText>
-            </TouchableOpacity>
             
             {/* Apply Button */}
             <TouchableOpacity 

@@ -1,6 +1,6 @@
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { Colors } from '@/constants/Colors';
-import { Event, useEvents } from '@/context/EventContext';
+import { Event, useEvents } from '@/context/EventsContext';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import * as Location from 'expo-location';
 import { StatusBar } from 'expo-status-bar';
@@ -25,7 +25,7 @@ export default function MapScreen() {
   const [drawingMode, setDrawingMode] = useState(false);
   const [polygonCoords, setPolygonCoords] = useState<Array<{ latitude: number; longitude: number }>>([]);
   const [savedPolygons, setSavedPolygons] = useState<Array<Array<{ latitude: number; longitude: number }>>>([]);
-  const { events, filteredEvents, filters, setMapFilterEnabled } = useEvents();
+  const { events, filteredEvents, filters, setSelectedTypes, setMapFilterEnabled } = useEvents();
   const [showEvents, setShowEvents] = useState(true);
   const [useEventFilters, setUseEventFilters] = useState(true);
   
@@ -134,6 +134,7 @@ export default function MapScreen() {
     
     return clusters;
   };
+
   // Handle cluster press - zoom in if multiple events
   const handleClusterPress = (cluster: Cluster) => {
     if (!mapRef.current || cluster.count <= 1) return;
@@ -152,7 +153,6 @@ export default function MapScreen() {
       longitudeDelta: Math.max(region.longitudeDelta / 10, 0.005),
     });
   };
-
 
   // Handle region change - update clusters
   const onRegionChange = (newRegion: Region) => {
@@ -175,6 +175,7 @@ export default function MapScreen() {
     }
   }, [showEvents, events, region]);
 
+  // Update clusters when showEvents, events, filteredEvents, region, useEventFilters change
   useEffect(() => {
     if (showEvents) { 
       // Use either all events or the filtered events based on the filter toggle
@@ -189,7 +190,7 @@ export default function MapScreen() {
   // Toggle filters application
   const toggleEventFilters = () => {
     setUseEventFilters(!useEventFilters);
-    // Also sync with EventContext - this will update filteredEvents
+    // Also sync with EventsContext - this will update filteredEvents
     if (!useEventFilters) {
       // When turning ON filters, make sure map filter is enabled in context
       setMapFilterEnabled(true);

@@ -6,7 +6,7 @@ import { HapticTab } from '@/components/HapticTab';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import TabBarBackground from '@/components/ui/TabBarBackground';
 import { Colors } from '@/constants/Colors';
-import { EventProvider } from '@/context/EventContext';
+import { EventProvider } from '@/context/EventsContext';
 import { useColorScheme } from '@/hooks/useColorScheme';
 
 export default function TabLayout() {

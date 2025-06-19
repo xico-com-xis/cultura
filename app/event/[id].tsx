@@ -6,7 +6,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
 import { IconSymbol } from '@/components/ui/IconSymbol';
-import { AccessibilityFeature, useEvents } from '@/context/EventContext';
+import { AccessibilityFeature, useEvents } from '@/context/EventsContext';
 
 const accessibilityIcons: Record<AccessibilityFeature, string> = {
   wheelchair: '♿',

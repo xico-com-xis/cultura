@@ -1,5 +1,9 @@
 import React, { createContext, useContext, useMemo, useState } from 'react';
 
+/*************/
+/*** TYPES ***/
+/*************/
+
 // Define event types
 export type EventType = 'music' | 'art' | 'theater' | 'dance' | 'workshop' | 'festival' | 'exhibition' | 'film' | 'literature' | 'other';
 
@@ -46,6 +50,23 @@ export type Event = {
   };
   image?: string; // URL to event image
 };
+
+// Define filter state type
+type FilterState = {
+  selectedTypes: Array<EventType | 'all'>;
+  mapFilterEnabled: boolean;
+};
+
+// Create context
+type EventsContextType = {
+  events: Event[];
+  setEvents: React.Dispatch<React.SetStateAction<Event[]>>;
+  filters: FilterState;
+  setSelectedTypes: (types: Array<EventType | 'all'>) => void;
+  setMapFilterEnabled: (enabled: boolean) => void;
+  filteredEvents: Event[];
+};
+
 
 // Sample event data with comprehensive information
 export const SAMPLE_EVENTS: Event[] = [
@@ -193,24 +214,9 @@ export const SAMPLE_EVENTS: Event[] = [
   }
 ];
 
-// Define filter state type
-type FilterState = {
-  selectedTypes: Array<EventType | 'all'>;
-  mapFilterEnabled: boolean;
-};
 
-// Create context
-type EventContextType = {
-  events: Event[];
-  setEvents: React.Dispatch<React.SetStateAction<Event[]>>;
-  // Add filter-related properties
-  filters: FilterState;
-  setSelectedTypes: (types: Array<EventType | 'all'>) => void;
-  setMapFilterEnabled: (enabled: boolean) => void;
-  filteredEvents: Event[]; // Pre-filtered events based on current filters
-};
 
-const EventContext = createContext<EventContextType | undefined>(undefined);
+const EventsContext = createContext<EventsContextType | undefined>(undefined);
 
 export const EventProvider: React.FC<{children: React.ReactNode}> = ({ children }) => {
   const [events, setEvents] = useState<Event[]>(SAMPLE_EVENTS);
@@ -218,7 +224,7 @@ export const EventProvider: React.FC<{children: React.ReactNode}> = ({ children 
   // Add filter state
   const [filters, setFilters] = useState<FilterState>({
     selectedTypes: ['all'],
-    mapFilterEnabled: true
+    mapFilterEnabled: false,
   });
 
   // Filter update methods
@@ -255,7 +261,7 @@ export const EventProvider: React.FC<{children: React.ReactNode}> = ({ children 
   }, [events, filters.selectedTypes, filters.mapFilterEnabled]);
 
   return (
-    <EventContext.Provider value={{ 
+    <EventsContext.Provider value={{ 
       events, 
       setEvents, 
       filters,
@@ -264,12 +270,12 @@ export const EventProvider: React.FC<{children: React.ReactNode}> = ({ children 
       filteredEvents
     }}>
       {children}
-    </EventContext.Provider>
+    </EventsContext.Provider>
   );
 };
 
 export const useEvents = () => {
-  const context = useContext(EventContext);
+  const context = useContext(EventsContext);
   if (context === undefined) {
     throw new Error('useEvents must be used within an EventProvider');
   }

@@ -4,7 +4,7 @@ import { Image, StyleSheet, TouchableOpacity, View } from 'react-native';
 
 import { ThemedText } from '@/components/ThemedText';
 import { Colors } from '@/constants/Colors';
-import { Event, EventType } from '@/context/EventContext';
+import { Event, EventType } from '@/context/EventsContext';
 import { useColorScheme } from '@/hooks/useColorScheme';
 
 // Icon mapping for different event types
