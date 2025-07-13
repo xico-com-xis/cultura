@@ -22,10 +22,18 @@ export default function MapScreen() {
   const insets = useSafeAreaInsets();
   const mapRef = useRef<MapView>(null);
   const [location, setLocation] = useState<Location.LocationObject | null>(null);
-  const [drawingMode, setDrawingMode] = useState(false);
-  const [polygonCoords, setPolygonCoords] = useState<Array<{ latitude: number; longitude: number }>>([]);
-  const [savedPolygons, setSavedPolygons] = useState<Array<Array<{ latitude: number; longitude: number }>>>([]);
-  const { events, filteredEvents, filters, setSelectedTypes, setMapFilterEnabled, hasActiveTypeFilters } = useEvents();
+  const { 
+    events, 
+    filteredEvents, 
+    filters, 
+    setSelectedTypes, 
+    setMapFilterEnabled, 
+    setDrawingMode,
+    setPolygonCoords,
+    setSavedPolygons,
+    setShouldNavigateToMap,
+    hasActiveTypeFilters 
+  } = useEvents();
   const [showEvents, setShowEvents] = useState(true);
   
   //Request location permissions and get current location
@@ -119,8 +127,8 @@ export default function MapScreen() {
           processed[otherEvent.id] = true;
           
           // Recalculate the center of the cluster (average of all coordinates)
-          const totalLat = cluster.events.reduce((sum, e) => sum + e.coordinates.latitude, 0);
-          const totalLng = cluster.events.reduce((sum, e) => sum + e.coordinates.longitude, 0);
+          const totalLat = cluster.events.reduce((sum, e) => sum + (e.coordinates?.latitude || 0), 0);
+          const totalLng = cluster.events.reduce((sum, e) => sum + (e.coordinates?.longitude || 0), 0);
           cluster.coordinate = {
             latitude: totalLat / cluster.events.length,
             longitude: totalLng / cluster.events.length
@@ -176,6 +184,15 @@ export default function MapScreen() {
     }
   }, [showEvents, events, filteredEvents, region, hasActiveTypeFilters]);
 
+  // Handle navigation trigger from events tab
+  useEffect(() => {
+    if (filters.shouldNavigateToMap) {
+      // Reset the navigation flag
+      setShouldNavigateToMap(false);
+      // The drawing mode should already be set, so the map will be in drawing mode
+    }
+  }, [filters.shouldNavigateToMap, setShouldNavigateToMap]);
+
 
 
   // Toggle filters application
@@ -222,19 +239,19 @@ export default function MapScreen() {
 
   // Continue drawing as finger moves
   const handleMapPanDrag = (event: any) => {
-    if (drawingMode) {
+    if (filters.drawingMode) {
       const { coordinate } = event.nativeEvent;
-      setPolygonCoords(prev => [...prev, coordinate]);
+      setPolygonCoords([...filters.polygonCoords, coordinate]);
     }
   };
 
   // Toggle drawing mode
   const toggleDrawingMode = () => {
-    setDrawingMode(!drawingMode);
-    if (drawingMode) {
-      if(polygonCoords.length > 2) {
+    setDrawingMode(!filters.drawingMode);
+    if (filters.drawingMode) {
+      if(filters.polygonCoords.length > 2) {
         // Save the current polygon and start a new one
-        setSavedPolygons([...savedPolygons, polygonCoords]);
+        setSavedPolygons([...filters.savedPolygons, filters.polygonCoords]);
         setPolygonCoords([]);
       }
     }    
@@ -294,10 +311,10 @@ export default function MapScreen() {
           }}
           onRegionChangeComplete={onRegionChange}
           onPanDrag={handleMapPanDrag}
-          scrollEnabled={!drawingMode}
-          zoomEnabled={!drawingMode}
-          rotateEnabled={!drawingMode}
-          pitchEnabled={!drawingMode}
+          scrollEnabled={!filters.drawingMode}
+          zoomEnabled={!filters.drawingMode}
+          rotateEnabled={!filters.drawingMode}
+          pitchEnabled={!filters.drawingMode}
         >
           {/* Event markers and clusters */}
           {showEvents && clusters.map(cluster => (
@@ -343,9 +360,9 @@ export default function MapScreen() {
           ))}
           
           {/* Current drawing polygon */}
-          {polygonCoords.length > 2 && (
+          {filters.polygonCoords.length > 2 && (
             <Polygon
-              coordinates={polygonCoords}
+              coordinates={filters.polygonCoords}
               strokeWidth={2}
               strokeColor={Colors[colorScheme ?? 'light'].tint}
               fillColor={`${Colors[colorScheme ?? 'light'].tint}50`}
@@ -353,16 +370,16 @@ export default function MapScreen() {
           )}
           
           {/* Current drawing path */}
-          {drawingMode && polygonCoords.length > 1 && (
+          {filters.drawingMode && filters.polygonCoords.length > 1 && (
             <Polyline
-              coordinates={polygonCoords}
+              coordinates={filters.polygonCoords}
               strokeWidth={3}
               strokeColor={Colors[colorScheme ?? 'light'].tint}
             />
           )}
           
           {/* Saved polygons */}
-          {savedPolygons.map((polygon, index) => (
+          {filters.savedPolygons.map((polygon, index) => (
             <Polygon
               key={index}
               coordinates={polygon}
@@ -389,7 +406,7 @@ export default function MapScreen() {
       </TouchableOpacity>
 
       {/* Drawing mode indicator */}
-      {drawingMode && (
+      {filters.drawingMode && (
         <View style={styles.drawingIndicator}>
           <Text style={styles.drawingIndicatorText}>Drawing Mode Active</Text>
           <Text style={styles.drawingHint}>Drag your finger to draw</Text>
@@ -405,24 +422,24 @@ export default function MapScreen() {
         <Text style={styles.eventToggleText}>{showEvents ? 'Hide events' : 'Events Hiden'}</Text>
       </TouchableOpacity>
 
-      {/* Drawing controls */}
-      <View style={[styles.controlsContainer, { paddingBottom: insets.bottom + 70 }]}>
-        <TouchableOpacity style={[styles.controlButton,
-          {backgroundColor: drawingMode ? 'rgba(255,0,0,0.2)' : Colors[colorScheme ?? 'light'].tabIconDefault}
-          ]}
-          onPress={toggleDrawingMode}
-        >
-          <IconSymbol 
-            size={24} 
-            name={drawingMode ? "checkmark" : "pencil"} 
-            color="#fff" 
-          />
-          <Text style={styles.buttonText}>
-            {drawingMode ? 'Save Area' : 'Draw Area'}
-          </Text>
-        </TouchableOpacity>
+      {/* Drawing controls - now controlled from Events tab */}
+      {filters.drawingMode && (
+        <View style={[styles.controlsContainer, { paddingBottom: insets.bottom + 70 }]}>
+          <TouchableOpacity style={[styles.controlButton,
+            {backgroundColor: 'rgba(255,0,0,0.2)'}
+            ]}
+            onPress={toggleDrawingMode}
+          >
+            <IconSymbol 
+              size={24} 
+              name="checkmark" 
+              color="#fff" 
+            />
+            <Text style={styles.buttonText}>
+              Save Area
+            </Text>
+          </TouchableOpacity>
 
-        {drawingMode && (
           <TouchableOpacity
             style={[styles.controlButton, { backgroundColor: 'rgb(255, 0, 0)' }]}
             onPress={clearDrawing}
@@ -430,18 +447,18 @@ export default function MapScreen() {
             <IconSymbol size={24} name="trash" color="#fff" />
             <Text style={styles.buttonText}>Clear</Text>
           </TouchableOpacity>
-        )}
 
-        {savedPolygons.length > 0 && (
-          <TouchableOpacity
-            style={[styles.controlButton, { backgroundColor: 'rgb(255, 0, 0)'}]}
-            onPress={resetAll}
-          >
-            <IconSymbol size={24} name="arrow.counterclockwise" color="#fff" />
-            <Text style={styles.buttonText}>Reset All</Text>
-          </TouchableOpacity>
-        )}
-      </View>
+          {filters.savedPolygons.length > 0 && (
+            <TouchableOpacity
+              style={[styles.controlButton, { backgroundColor: 'rgb(255, 0, 0)'}]}
+              onPress={resetAll}
+            >
+              <IconSymbol size={24} name="arrow.counterclockwise" color="#fff" />
+              <Text style={styles.buttonText}>Reset All</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+      )}
 
       {/* Event filter toggle button - only clickable when filters are active */}
       <TouchableOpacity

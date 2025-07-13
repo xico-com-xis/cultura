@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { FlatList, Modal, StyleSheet, TouchableOpacity, View } from 'react-native';
+import { Alert, FlatList, Modal, StyleSheet, TouchableOpacity, View } from 'react-native';
 
 import EventCard from '@/components/EventCard';
 import { ThemedText } from '@/components/ThemedText';
@@ -26,18 +26,28 @@ const eventTypeOptions: Array<{ type: EventType | 'all'; label: string; icon: st
 
 export default function EventsScreen() {
   // Use filtered events and filter methods from context
-  const { filteredEvents, filters, setSelectedTypes, setMapFilterEnabled } = useEvents();
+  const { 
+    filteredEvents, 
+    filters, 
+    setSelectedTypes, 
+    setMapFilterEnabled, 
+    setDrawingMode,
+    setSelectedCity,
+    setShouldNavigateToMap,
+    availableCities
+  } = useEvents();
   const colorScheme = useColorScheme();
   const [filterModalVisible, setFilterModalVisible] = useState(false);
   
   // Add temporary state variables for the modal
   const [tempSelectedTypes, setTempSelectedTypes] = useState<Array<EventType | 'all'>>(['all']);
+  const [tempSelectedCity, setTempSelectedCity] = useState<string>('all');
 
   const [mapModalVisible, setMapModalVisible] = useState(false);
 
   const openMapModal = () => {
+    setTempSelectedCity(filters.selectedCity);
     setMapModalVisible(true);
-    setMapFilterEnabled(filters.mapFilterEnabled);
   };
   
   // Update temporary filter states when modal opens
@@ -51,23 +61,61 @@ export default function EventsScreen() {
     setSelectedTypes([...tempSelectedTypes]);
     setFilterModalVisible(false);
   };
+
+  // Apply zone filters and close modal
+  const applyZoneFilters = () => {
+    setSelectedCity(tempSelectedCity);
+    setMapModalVisible(false);
+  };
+
+  // Handle draw area button press
+  const handleDrawArea = () => {
+    setDrawingMode(true);
+    setShouldNavigateToMap(true);
+    setMapModalVisible(false);
+    
+    // Show user a message to go to map tab
+    Alert.alert(
+      "Drawing Mode Activated",
+      "Please go to the Map tab to draw your custom area filter.",
+      [{ text: "OK" }]
+    );
+  };
   
-  // Check if filters are active
+  // Check if category filters are active
+  const areCategoryFiltersActive = () => {
+    return !(filters.selectedTypes.length === 1 && filters.selectedTypes.includes('all'));
+  };
+
+  // Check if zone filters are active
+  const areZoneFiltersActive = () => {
+    return filters.mapFilterEnabled || filters.selectedCity !== 'all';
+  };
+
+  // Check if any filters are active (for overall logic)
   const areFiltersActive = () => {
-    return !(filters.selectedTypes.length === 1 && filters.selectedTypes.includes('all')) || 
-           filters.mapFilterEnabled;
+    return areCategoryFiltersActive() || areZoneFiltersActive();
   };
   
   return (
     <ThemedView style={styles.container}>
+      {/* Drawing mode indicator */}
+      {filters.drawingMode && (
+        <View style={styles.drawingModeIndicator}>
+          <ThemedText style={styles.drawingModeText}>
+            ✏️ Drawing Mode Active - Go to Map tab to draw your area
+          </ThemedText>
+        </View>
+      )}
+      
       <ThemedView style={styles.header}>
         <View style={styles.headerActions}>
           {/* Filter button */}
           <TouchableOpacity 
             style={[
               styles.filterButtonType,
-              // Apply colored background when any filter is active
-              areFiltersActive() && {
+              // Apply colored background when category filters are active
+              areCategoryFiltersActive() && {
                 backgroundColor: Colors[colorScheme ?? 'light'].tint,
                 borderColor: Colors[colorScheme ?? 'light'].tint,
               }
@@ -77,16 +125,16 @@ export default function EventsScreen() {
             <IconSymbol 
               name="line.3.horizontal.decrease" 
               size={20} 
-              // Change icon color to white when filters are active
-              color={areFiltersActive() 
+              // Change icon color to white when category filters are active
+              color={areCategoryFiltersActive() 
                 ? '#fff' 
                 : Colors[colorScheme ?? 'light'].text} 
             />
             <ThemedText 
               style={[
                 styles.filterButtonText,
-                // Change text color to white when filters are active
-                areFiltersActive() && { color: '#fff' }
+                // Change text color to white when category filters are active
+                areCategoryFiltersActive() && { color: '#fff' }
               ]}
             >
               Categoria
@@ -95,16 +143,32 @@ export default function EventsScreen() {
 
           {/* Map button */}
           <TouchableOpacity 
-            style={styles.filterButtonMap}
+            style={[
+              styles.filterButtonMap,
+              // Apply colored background when zone filters are active
+              areZoneFiltersActive() && {
+                backgroundColor: Colors[colorScheme ?? 'light'].tint,
+                borderColor: Colors[colorScheme ?? 'light'].tint,
+              }
+            ]}
             onPress={openMapModal}
           >
-            <ThemedText style={styles.filterButtonText}>
+            <ThemedText 
+              style={[
+                styles.filterButtonText,
+                // Change text color to white when zone filters are active
+                areZoneFiltersActive() && { color: '#fff' }
+              ]}
+            >
               Zona
             </ThemedText>
             <IconSymbol 
               name="line.3.horizontal.decrease" 
               size={20} 
-              color={Colors[colorScheme ?? 'light'].text} 
+              // Change icon color to white when zone filters are active
+              color={areZoneFiltersActive() 
+                ? '#fff' 
+                : Colors[colorScheme ?? 'light'].text} 
             />
           </TouchableOpacity>
         </View>
@@ -222,6 +286,13 @@ export default function EventsScreen() {
       </Modal>
 
       {/* Map Modal */}
+      <View 
+        style={[
+          styles.modalOverlay,
+          mapModalVisible && { backgroundColor: 'rgb(0, 0, 0)' }
+        ]}
+        pointerEvents={mapModalVisible ? 'auto' : 'none'}
+      ></View>
       <Modal
         animationType="slide"
         transparent={true}
@@ -230,20 +301,80 @@ export default function EventsScreen() {
       >
         <View style={styles.modalContainer}>
           <ThemedView style={styles.modalContent}>
-            <View style={styles.modalHeader}>
-              <ThemedText type="title" style={styles.modalTitle}>Event Map</ThemedText>
-              <TouchableOpacity 
-                style={styles.typeButton}
-                onPress={() => setMapModalVisible(false)}
-              >
-                <IconSymbol name="xmark" size={24} color={Colors[colorScheme ?? 'light'].text} />
-              </TouchableOpacity>
-            </View>
+            <ThemedText type="title" style={styles.modalTitle}>Zone Filter</ThemedText>
+            <ThemedText style={styles.modalSubtitle}>Filter events by city or draw a custom area</ThemedText>
             
-            {/* Map content placeholder */}
-            <ThemedView style={styles.mapContainer}>
-              <ThemedText style={styles.mapPlaceholder}>Map will be displayed here</ThemedText>
-            </ThemedView>
+            <TouchableOpacity 
+              style={styles.closeButton}
+              onPress={() => setMapModalVisible(false)}
+            >
+              <ThemedText style={styles.closeButtonText}>×</ThemedText>
+            </TouchableOpacity>
+            
+            {/* City Filter Section */}
+            <ThemedText style={styles.filterSectionTitle}>Filter by City</ThemedText>
+            <View style={styles.filterOptionsGrid}>
+              <TouchableOpacity 
+                style={[
+                  styles.filterOption,
+                  tempSelectedCity === 'all' && {
+                    backgroundColor: Colors[colorScheme ?? 'light'].tint,
+                    borderColor: Colors[colorScheme ?? 'light'].tint,
+                  }
+                ]}
+                onPress={() => setTempSelectedCity('all')}
+              >
+                <ThemedText 
+                  style={[
+                    styles.filterOptionText, 
+                    tempSelectedCity === 'all' && { color: '#fff' }
+                  ]}
+                >
+                  🌍 All Cities
+                </ThemedText>
+              </TouchableOpacity>
+              
+              {availableCities.map((city) => (
+                <TouchableOpacity 
+                  key={city}
+                  style={[
+                    styles.filterOption,
+                    tempSelectedCity === city && {
+                      backgroundColor: Colors[colorScheme ?? 'light'].tint,
+                      borderColor: Colors[colorScheme ?? 'light'].tint,
+                    }
+                  ]}
+                  onPress={() => setTempSelectedCity(city)}
+                >
+                  <ThemedText 
+                    style={[
+                      styles.filterOptionText, 
+                      tempSelectedCity === city && { color: '#fff' }
+                    ]}
+                  >
+                    📍 {city}
+                  </ThemedText>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            {/* Area Drawing Section */}
+            <ThemedText style={styles.filterSectionTitle}>Draw Custom Area</ThemedText>
+            <TouchableOpacity 
+              style={styles.drawAreaButton}
+              onPress={handleDrawArea}
+            >
+              <IconSymbol name="pencil" size={20} color={Colors[colorScheme ?? 'light'].tint} />
+              <ThemedText style={styles.drawAreaButtonText}>Draw Area on Map</ThemedText>
+            </TouchableOpacity>
+            
+            {/* Apply Button */}
+            <TouchableOpacity 
+              style={styles.applyButton}
+              onPress={applyZoneFilters}
+            >
+              <ThemedText style={styles.applyButtonText}>Apply Zone Filter</ThemedText>
+            </TouchableOpacity>
           </ThemedView>
         </View>
       </Modal>
@@ -408,5 +539,59 @@ const styles = StyleSheet.create({
   },
   mapPlaceholder: {
     opacity: 0.6,
+  },
+  drawAreaButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: Colors.light.tint,
+    backgroundColor: 'transparent',
+    marginBottom: 20,
+    gap: 8,
+  },
+  drawAreaButtonText: {
+    color: Colors.light.tint,
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  drawingModeIndicator: {
+    backgroundColor: Colors.light.tint,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    marginBottom: 16,
+    alignItems: 'center',
+  },
+  drawingModeText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '600',
+    textAlign: 'center',
+  },
+  modalSubtitle: {
+    fontSize: 14,
+    opacity: 0.7,
+    marginBottom: 20,
+    textAlign: 'center',
+  },
+  closeButton: {
+    position: 'absolute',
+    top: 15,
+    right: 15,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: 'rgba(0, 0, 0, 0.1)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  closeButtonText: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#666',
   },
 });

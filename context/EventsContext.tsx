@@ -1,5 +1,17 @@
 import React, { createContext, useContext, useMemo, useState } from 'react';
 
+// Country-City mapping (in a real app, this would come from a database or API)
+const COUNTRY_CITIES: Record<string, string[]> = {
+  'Portugal': ['Lisboa', 'Porto', 'Braga', 'Coimbra', 'Faro', 'Aveiro', 'Évora', 'Viseu'],
+  'Spain': ['Madrid', 'Barcelona', 'Valencia', 'Sevilla', 'Bilbao', 'Málaga', 'Zaragoza', 'Granada'],
+  'France': ['Paris', 'Lyon', 'Marseille', 'Toulouse', 'Nice', 'Nantes', 'Strasbourg', 'Bordeaux'],
+  'Italy': ['Roma', 'Milano', 'Napoli', 'Torino', 'Palermo', 'Genova', 'Bologna', 'Firenze'],
+  'Germany': ['Berlin', 'Hamburg', 'München', 'Köln', 'Frankfurt', 'Stuttgart', 'Düsseldorf', 'Dortmund'],
+  'United Kingdom': ['London', 'Manchester', 'Birmingham', 'Glasgow', 'Liverpool', 'Edinburgh', 'Bristol', 'Cardiff'],
+  'Netherlands': ['Amsterdam', 'Rotterdam', 'Den Haag', 'Utrecht', 'Eindhoven', 'Tilburg', 'Groningen', 'Almere'],
+  'Belgium': ['Brussels', 'Antwerp', 'Ghent', 'Charleroi', 'Liège', 'Bruges', 'Namur', 'Leuven'],
+};
+
 /*************/
 /*** TYPES ***/
 /*************/
@@ -55,6 +67,12 @@ export type Event = {
 type FilterState = {
   selectedTypes: Array<EventType | 'all'>;
   mapFilterEnabled: boolean;
+  drawingMode: boolean;
+  selectedCity: string | 'all';
+  polygonCoords: Array<{ latitude: number; longitude: number }>;
+  savedPolygons: Array<Array<{ latitude: number; longitude: number }>>;
+  shouldNavigateToMap: boolean;
+  selectedCountry: string;
 };
 
 // Create context
@@ -64,8 +82,16 @@ type EventsContextType = {
   filters: FilterState;
   setSelectedTypes: (types: Array<EventType | 'all'>) => void;
   setMapFilterEnabled: (enabled: boolean) => void;
+  setDrawingMode: (enabled: boolean) => void;
+  setSelectedCity: (city: string) => void;
+  setPolygonCoords: (coords: Array<{ latitude: number; longitude: number }>) => void;
+  setSavedPolygons: (polygons: Array<Array<{ latitude: number; longitude: number }>>) => void;
+  setShouldNavigateToMap: (should: boolean) => void;
+  setSelectedCountry: (country: string) => void;
   filteredEvents: Event[];
   hasActiveTypeFilters: boolean;
+  availableCities: string[];
+  availableCountries: string[];
 };
 
 
@@ -226,6 +252,12 @@ export const EventProvider: React.FC<{children: React.ReactNode}> = ({ children 
   const [filters, setFilters] = useState<FilterState>({
     selectedTypes: ['all'],
     mapFilterEnabled: false,
+    drawingMode: false,
+    selectedCity: 'all',
+    polygonCoords: [],
+    savedPolygons: [],
+    shouldNavigateToMap: false,
+    selectedCountry: 'Portugal', // Default country
   });
 
   // Filter update methods
@@ -236,6 +268,40 @@ export const EventProvider: React.FC<{children: React.ReactNode}> = ({ children 
   const setMapFilterEnabled = (enabled: boolean) => {
     setFilters(prev => ({ ...prev, mapFilterEnabled: enabled }));
   };
+
+  const setDrawingMode = (enabled: boolean) => {
+    setFilters(prev => ({ ...prev, drawingMode: enabled }));
+  };
+
+  const setSelectedCity = (city: string) => {
+    setFilters(prev => ({ ...prev, selectedCity: city }));
+  };
+
+  const setPolygonCoords = (coords: Array<{ latitude: number; longitude: number }>) => {
+    setFilters(prev => ({ ...prev, polygonCoords: coords }));
+  };
+
+  const setSavedPolygons = (polygons: Array<Array<{ latitude: number; longitude: number }>>) => {
+    setFilters(prev => ({ ...prev, savedPolygons: polygons }));
+  };
+
+  const setShouldNavigateToMap = (should: boolean) => {
+    setFilters(prev => ({ ...prev, shouldNavigateToMap: should }));
+  };
+
+  const setSelectedCountry = (country: string) => {
+    setFilters(prev => ({ ...prev, selectedCountry: country, selectedCity: 'all' })); // Reset city when country changes
+  };
+
+  // Calculate available cities based on selected country
+  const availableCities = useMemo(() => {
+    return COUNTRY_CITIES[filters.selectedCountry] || [];
+  }, [filters.selectedCountry]);
+
+  // Calculate available countries
+  const availableCountries = useMemo(() => {
+    return Object.keys(COUNTRY_CITIES).sort();
+  }, []);
 
   // Calculate filtered events (memoized to prevent unnecessary recalculations)
   const filteredEvents = useMemo(() => {
@@ -252,18 +318,24 @@ export const EventProvider: React.FC<{children: React.ReactNode}> = ({ children 
       const passesTypeFilter = filters.selectedTypes.includes('all') || 
                               filters.selectedTypes.includes(event.type);
       
+      // City filter: event passes if 'all' is selected or its city matches
+      const passesCityFilter = filters.selectedCity === 'all' || 
+                              event.location.toLowerCase().includes(filters.selectedCity.toLowerCase());
+      
       // Map filter: when enabled, use distance-based filtering (mocked implementation)
       const passesMapFilter = !filters.mapFilterEnabled || 
                              (event.id.charCodeAt(0) % 2 === 0); // Mock implementation
       
-      // Event must pass BOTH filters
-      return passesTypeFilter && passesMapFilter;
+      // Event must pass ALL filters
+      return passesTypeFilter && passesCityFilter && passesMapFilter;
     });
-  }, [events, filters.selectedTypes, filters.mapFilterEnabled]);
+  }, [events, filters.selectedTypes, filters.selectedCity, filters.mapFilterEnabled]);
 
   const hasActiveTypeFilters = useMemo(() => {
-    return !(filters.selectedTypes.length === 1 && filters.selectedTypes.includes('all'));
-  }, [filters.selectedTypes]);
+    return !(filters.selectedTypes.length === 1 && filters.selectedTypes.includes('all')) ||
+           filters.selectedCity !== 'all' ||
+           filters.mapFilterEnabled;
+  }, [filters.selectedTypes, filters.selectedCity, filters.mapFilterEnabled]);
 
   return (
     <EventsContext.Provider value={{ 
@@ -272,8 +344,16 @@ export const EventProvider: React.FC<{children: React.ReactNode}> = ({ children 
       filters,
       setSelectedTypes,
       setMapFilterEnabled,
+      setDrawingMode,
+      setSelectedCity,
+      setPolygonCoords,
+      setSavedPolygons,
+      setShouldNavigateToMap,
+      setSelectedCountry,
       filteredEvents,
-      hasActiveTypeFilters
+      hasActiveTypeFilters,
+      availableCities,
+      availableCountries
     }}>
       {children}
     </EventsContext.Provider>
