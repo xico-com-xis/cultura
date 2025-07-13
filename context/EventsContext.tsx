@@ -65,6 +65,7 @@ type EventsContextType = {
   setSelectedTypes: (types: Array<EventType | 'all'>) => void;
   setMapFilterEnabled: (enabled: boolean) => void;
   filteredEvents: Event[];
+  hasActiveTypeFilters: boolean;
 };
 
 
@@ -260,6 +261,10 @@ export const EventProvider: React.FC<{children: React.ReactNode}> = ({ children 
     });
   }, [events, filters.selectedTypes, filters.mapFilterEnabled]);
 
+  const hasActiveTypeFilters = useMemo(() => {
+    return !(filters.selectedTypes.length === 1 && filters.selectedTypes.includes('all'));
+  }, [filters.selectedTypes]);
+
   return (
     <EventsContext.Provider value={{ 
       events, 
@@ -267,7 +272,8 @@ export const EventProvider: React.FC<{children: React.ReactNode}> = ({ children 
       filters,
       setSelectedTypes,
       setMapFilterEnabled,
-      filteredEvents
+      filteredEvents,
+      hasActiveTypeFilters
     }}>
       {children}
     </EventsContext.Provider>

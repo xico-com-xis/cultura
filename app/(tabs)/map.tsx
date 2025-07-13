@@ -25,9 +25,8 @@ export default function MapScreen() {
   const [drawingMode, setDrawingMode] = useState(false);
   const [polygonCoords, setPolygonCoords] = useState<Array<{ latitude: number; longitude: number }>>([]);
   const [savedPolygons, setSavedPolygons] = useState<Array<Array<{ latitude: number; longitude: number }>>>([]);
-  const { events, filteredEvents, filters, setSelectedTypes, setMapFilterEnabled } = useEvents();
+  const { events, filteredEvents, filters, setSelectedTypes, setMapFilterEnabled, hasActiveTypeFilters } = useEvents();
   const [showEvents, setShowEvents] = useState(true);
-  const [useEventFilters, setUseEventFilters] = useState(true);
   
   //Request location permissions and get current location
   useEffect(() => {
@@ -75,7 +74,7 @@ export default function MapScreen() {
     const zoomThreshold = 0.02; // At this zoom level or lower, don't cluster at all
     
     // If zoomed in enough, don't cluster at all
-    if (delta <= zoomThreshold) {
+    if (delta <= zoomThreshold || validEvents.length <= 1) {
       console.log(`Showing ${validEvents.length} individual markers`); // Debug logging
       return validEvents.map((event, index) => ({
         id: `single-${event.id}`,
@@ -159,42 +158,29 @@ export default function MapScreen() {
     setRegion(newRegion);
 
     if (showEvents && events.length > 0) {
-      const eventsToCluster = useEventFilters ? filteredEvents : events;
+      const eventsToCluster = hasActiveTypeFilters ? filteredEvents : events;
       const newClusters = clusterEvents(eventsToCluster, newRegion.latitudeDelta);
       setClusters(newClusters);
     }
   };
 
-  // Update clusters when events, showEvents, or region changes
+  // Update clusters when showEvents, events, filteredEvents, region, hasActiveTypeFilters change
   useEffect(() => {
     if (showEvents && events.length > 0) {
-      const newClusters = clusterEvents(events, region.latitudeDelta);
-      setClusters(newClusters);
-    } else {
-      setClusters([]);
-    }
-  }, [showEvents, events, region]);
-
-  // Update clusters when showEvents, events, filteredEvents, region, useEventFilters change
-  useEffect(() => {
-    if (showEvents) { 
       // Use either all events or the filtered events based on the filter toggle
-      const eventsToCluster = useEventFilters ? filteredEvents : events;
+      const eventsToCluster = hasActiveTypeFilters ? filteredEvents : events;
       const newClusters = clusterEvents(eventsToCluster, region.latitudeDelta);
       setClusters(newClusters);
     } else {
       setClusters([]);
     }
-  }, [showEvents, events, filteredEvents, region, useEventFilters]);
+  }, [showEvents, events, filteredEvents, region, hasActiveTypeFilters]);
+
+
 
   // Toggle filters application
-  const toggleEventFilters = () => {
-    setUseEventFilters(!useEventFilters);
-    // Also sync with EventsContext - this will update filteredEvents
-    if (!useEventFilters) {
-      // When turning ON filters, make sure map filter is enabled in context
-      setMapFilterEnabled(true);
-    }
+  const toggleOffEventsFilters = () => {
+    setSelectedTypes(['all']);
   };
 
   const handleIndividualEventPress = (event: Event) => {
@@ -457,17 +443,21 @@ export default function MapScreen() {
         )}
       </View>
 
-      {/* Event filter toggle button */}
+      {/* Event filter toggle button - only clickable when filters are active */}
       <TouchableOpacity
         style={[
           styles.filterToggleButton, 
-          { backgroundColor: useEventFilters ? Colors[colorScheme ?? 'light'].tint : '#808080' }
+          { 
+            backgroundColor: hasActiveTypeFilters ? Colors[colorScheme ?? 'light'].tint : '#808080',
+            opacity: hasActiveTypeFilters ? 1 : 0.6
+          }
         ]}
-        onPress={toggleEventFilters}
+        onPress={hasActiveTypeFilters ? toggleOffEventsFilters : undefined}
+        disabled={!hasActiveTypeFilters}
       >
         <IconSymbol size={20} name="line.3.horizontal.decrease" color="#fff" />
         <Text style={styles.eventToggleText}>
-          {useEventFilters ? 'Filters On' : 'Filters Off'}
+          {hasActiveTypeFilters ? 'Filters On' : 'All Events'}
         </Text>
       </TouchableOpacity>
 
