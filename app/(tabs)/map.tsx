@@ -30,7 +30,7 @@ export default function MapScreen() {
     setMapFilterEnabled, 
     setDrawingMode,
     setPolygonCoords,
-    setSavedPolygons,
+    setSelectedCity,
     setShouldNavigateToMap,
     hasActiveTypeFilters 
   } = useEvents();
@@ -195,9 +195,12 @@ export default function MapScreen() {
 
 
 
-  // Toggle filters application
+  // Toggle filters application - clears all filters
   const toggleOffEventsFilters = () => {
     setSelectedTypes(['all']);
+    setSelectedCity('all');
+    setMapFilterEnabled(false);
+    setPolygonCoords([]);
   };
 
   const handleIndividualEventPress = (event: Event) => {
@@ -305,18 +308,6 @@ export default function MapScreen() {
     }
   };
 
-  // Toggle drawing mode
-  const toggleDrawingMode = () => {
-    setDrawingMode(!filters.drawingMode);
-    if (filters.drawingMode) {
-      if(filters.polygonCoords.length > 2) {
-        // Save the current polygon and start a new one
-        setSavedPolygons([...filters.savedPolygons, filters.polygonCoords]);
-        setPolygonCoords([]);
-      }
-    }    
-  };
-
   // Clear the current drawing (but stay in drawing mode)
   const clearDrawing = () => {
     setPolygonCoords([]);
@@ -328,11 +319,11 @@ export default function MapScreen() {
     setDrawingMode(false);
   };
 
-  // Reset all saved drawings
-  const resetAll = () => {
-    setPolygonCoords([]);
-    setSavedPolygons([]);
+  // Apply the drawn area as a zone filter
+  const applyDrawnArea = () => {
+    setMapFilterEnabled(true);
     setDrawingMode(false);
+    // The current polygon becomes the active filter area
   };
 
   // Toggle events visibility
@@ -444,17 +435,6 @@ export default function MapScreen() {
               strokeColor={Colors[colorScheme ?? 'light'].tint}
             />
           )}
-          
-          {/* Saved polygons */}
-          {filters.savedPolygons.map((polygon, index) => (
-            <Polygon
-              key={index}
-              coordinates={polygon}
-              strokeWidth={2}
-              strokeColor={Colors[colorScheme ?? 'light'].tabIconDefault}
-              fillColor={`${Colors[colorScheme ?? 'light'].tabIconDefault}50`}
-            />
-          ))}
         </MapView>
       ) : (
         <View style={styles.loadingContainer}>
@@ -484,20 +464,22 @@ export default function MapScreen() {
       {/* Drawing controls - now controlled from Events tab */}
       {filters.drawingMode && (
         <View style={[styles.controlsContainer, { paddingBottom: insets.bottom + 70 }]}>
-          <TouchableOpacity style={[styles.controlButton,
-            {backgroundColor: Colors[colorScheme ?? 'light'].tint}
-            ]}
-            onPress={toggleDrawingMode}
-          >
-            <IconSymbol 
-              size={24} 
-              name="checkmark" 
-              color="#fff" 
-            />
-            <Text style={styles.buttonText}>
-              Save Area
-            </Text>
-          </TouchableOpacity>
+          {filters.polygonCoords.length > 2 && (
+            <TouchableOpacity style={[styles.controlButton,
+              {backgroundColor: Colors[colorScheme ?? 'light'].tint}
+              ]}
+              onPress={applyDrawnArea}
+            >
+              <IconSymbol 
+                size={24} 
+                name="checkmark" 
+                color="#fff" 
+              />
+              <Text style={styles.buttonText}>
+                Apply
+              </Text>
+            </TouchableOpacity>
+          )}
 
           <TouchableOpacity
             style={[styles.controlButton, { backgroundColor: '#6B7280' }]}
@@ -514,16 +496,6 @@ export default function MapScreen() {
             <IconSymbol size={24} name="xmark" color="#fff" />
             <Text style={styles.buttonText}>Cancel</Text>
           </TouchableOpacity>
-
-          {filters.savedPolygons.length > 0 && (
-            <TouchableOpacity
-              style={[styles.controlButton, { backgroundColor: 'rgb(255, 0, 0)'}]}
-              onPress={resetAll}
-            >
-              <IconSymbol size={24} name="arrow.counterclockwise" color="#fff" />
-              <Text style={styles.buttonText}>Reset All</Text>
-            </TouchableOpacity>
-          )}
         </View>
       )}
 

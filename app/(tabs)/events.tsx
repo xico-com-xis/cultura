@@ -34,6 +34,7 @@ export default function EventsScreen() {
     setMapFilterEnabled, 
     setDrawingMode,
     setSelectedCity,
+    setPolygonCoords,
     setShouldNavigateToMap,
     availableCities
   } = useEvents();
@@ -75,8 +76,12 @@ export default function EventsScreen() {
     if (filters.drawingMode) {
       // If drawing mode is active, cancel it
       setDrawingMode(false);
+    } else if (filters.mapFilterEnabled) {
+      // If map filter is applied, remove it
+      setMapFilterEnabled(false);
+      setPolygonCoords([]);
     } else {
-      // If drawing mode is not active, start it
+      // If neither active, start drawing mode
       setDrawingMode(true);
       setShouldNavigateToMap(true);
       setMapModalVisible(false);
@@ -358,20 +363,31 @@ export default function EventsScreen() {
             <TouchableOpacity 
               style={[
                 styles.drawAreaButton,
-                filters.drawingMode && styles.drawAreaButtonActive
+                (filters.drawingMode || filters.mapFilterEnabled) && styles.drawAreaButtonActive
               ]}
               onPress={handleDrawArea}
             >
               <IconSymbol 
-                name={filters.drawingMode ? "xmark.circle" : "pencil"} 
+                name={
+                  filters.drawingMode ? "xmark.circle" : 
+                  filters.mapFilterEnabled ? "trash" : 
+                  "pencil"
+                } 
                 size={20} 
-                color={filters.drawingMode ? '#DC2626' : Colors[colorScheme ?? 'light'].tint} 
+                color={
+                  (filters.drawingMode || filters.mapFilterEnabled) ? '#DC2626' : 
+                  Colors[colorScheme ?? 'light'].tint
+                } 
               />
               <ThemedText style={[
                 styles.drawAreaButtonText,
-                filters.drawingMode && styles.drawAreaButtonTextActive
+                (filters.drawingMode || filters.mapFilterEnabled) && styles.drawAreaButtonTextActive
               ]}>
-                {filters.drawingMode ? "Cancel Drawing Mode" : "Draw Area on Map"}
+                {
+                  filters.drawingMode ? "Cancel Drawing Mode" :
+                  filters.mapFilterEnabled ? "Remove Area Filter" :
+                  "Draw Area on Map"
+                }
               </ThemedText>
             </TouchableOpacity>
             

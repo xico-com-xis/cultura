@@ -1,5 +1,24 @@
 import React, { createContext, useContext, useMemo, useState } from 'react';
 
+// Point-in-polygon algorithm (ray casting)
+const isPointInPolygon = (point: { latitude: number; longitude: number }, polygon: Array<{ latitude: number; longitude: number }>): boolean => {
+  if (polygon.length < 3) return false;
+  
+  const { latitude: x, longitude: y } = point;
+  let inside = false;
+  
+  for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+    const { latitude: xi, longitude: yi } = polygon[i];
+    const { latitude: xj, longitude: yj } = polygon[j];
+    
+    if (((yi > y) !== (yj > y)) && (x < (xj - xi) * (y - yi) / (yj - yi) + xi)) {
+      inside = !inside;
+    }
+  }
+  
+  return inside;
+};
+
 // Country-City mapping (in a real app, this would come from a database or API)
 const COUNTRY_CITIES: Record<string, string[]> = {
   'Portugal': ['Lisboa', 'Porto', 'Braga', 'Coimbra', 'Faro', 'Aveiro', 'Évora', 'Viseu'],
@@ -716,14 +735,19 @@ export const EventProvider: React.FC<{children: React.ReactNode}> = ({ children 
       const passesCityFilter = filters.selectedCity === 'all' || 
                               event.city === filters.selectedCity;
       
-      // Map filter: when enabled, use distance-based filtering (mocked implementation)
+      // Map filter: when enabled, check if event is within drawn polygon
       const passesMapFilter = !filters.mapFilterEnabled || 
-                             (event.id.charCodeAt(0) % 2 === 0); // Mock implementation
+                             (filters.polygonCoords.length > 2 && 
+                              event.coordinates &&
+                              isPointInPolygon(
+                                { latitude: event.coordinates.latitude, longitude: event.coordinates.longitude }, 
+                                filters.polygonCoords
+                              ));
       
       // Event must pass ALL filters
       return passesTypeFilter && passesCountryFilter && passesCityFilter && passesMapFilter;
     });
-  }, [events, filters.selectedTypes, filters.selectedCountry, filters.selectedCity, filters.mapFilterEnabled]);
+  }, [events, filters.selectedTypes, filters.selectedCountry, filters.selectedCity, filters.mapFilterEnabled, filters.polygonCoords]);
 
   const hasActiveTypeFilters = useMemo(() => {
     return !(filters.selectedTypes.length === 1 && filters.selectedTypes.includes('all')) ||
