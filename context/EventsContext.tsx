@@ -51,6 +51,8 @@ export type Event = {
   type: EventType;
   schedule: EventSchedule[];
   location: string;
+  city: string; // Must match one of the cities in COUNTRY_CITIES
+  country: string; // Must match one of the countries in COUNTRY_CITIES
   description: string;
   organizer: Organizer;
   professionals?: string[]; // Cultural professionals involved
@@ -97,6 +99,7 @@ type EventsContextType = {
 
 // Sample event data with comprehensive information
 export const SAMPLE_EVENTS: Event[] = [
+  // PORTUGAL - Lisboa
   { 
     id: '1', 
     title: 'Art Exhibition: Modern Perspectives',
@@ -106,11 +109,13 @@ export const SAMPLE_EVENTS: Event[] = [
       { date: '2025-05-16T10:00:00', endDate: '2025-05-16T20:00:00' },
       { date: '2025-05-17T10:00:00', endDate: '2025-05-17T20:00:00' }
     ],
-    location: 'City Gallery, Main St 42',
+    location: 'Museu Nacional de Arte Antiga, Lisboa',
+    city: 'Lisboa',
+    country: 'Portugal',
     description: 'Featuring works from local artists exploring modern themes and techniques. Curated by Maria Santos, with installations by João Silva and Ana Martins.',
     organizer: {
       id: 'org1',
-      name: 'City Arts Association',
+      name: 'Museu Nacional de Arte Antiga',
       profileImage: 'https://example.com/caa.png'
     },
     professionals: ['Maria Santos (Curator)', 'João Silva (Artist)', 'Ana Martins (Artist)'],
@@ -123,11 +128,13 @@ export const SAMPLE_EVENTS: Event[] = [
       onSiteAvailable: true
     },
     coordinates: {
-      latitude: 48.817607,
-      longitude: 9.026766,
+      latitude: 38.7139,
+      longitude: -9.1394,
     },
     image: 'https://www.bizzabo.com/wp-content/uploads/2021/09/event-marketing-examples-fundraising-gala-min.png'
   },
+  
+  // PORTUGAL - Porto
   { 
     id: '2', 
     title: 'Summer Music Festival',
@@ -136,7 +143,9 @@ export const SAMPLE_EVENTS: Event[] = [
       { date: '2025-06-20T17:00:00', endDate: '2025-06-20T23:00:00' },
       { date: '2025-06-21T16:00:00', endDate: '2025-06-21T23:30:00' }
     ],
-    location: 'Central Park Amphitheater',
+    location: 'Parque da Cidade, Porto',
+    city: 'Porto',
+    country: 'Portugal',
     description: 'Annual music festival featuring 12 bands across two days. Headliners include The Rolling Notes and Electric Symphony.',
     organizer: {
       id: 'org2',
@@ -153,11 +162,13 @@ export const SAMPLE_EVENTS: Event[] = [
       onSiteAvailable: false
     },
     coordinates: {
-      latitude: 48.817507, 
-      longitude: 9.025529,
+      latitude: 41.1579,
+      longitude: -8.6291,
     },
     image: 'https://youthincmag.com/wp-content/uploads/2019/02/Top-10-Colege-Fests-India.jpg'
   },
+  
+  // PORTUGAL - Coimbra
   { 
     id: '3', 
     title: 'Traditional Crafts Workshop',
@@ -165,7 +176,9 @@ export const SAMPLE_EVENTS: Event[] = [
     schedule: [
       { date: '2025-05-28T14:00:00', endDate: '2025-05-28T17:00:00' }
     ],
-    location: 'Community Center, Room 3B',
+    location: 'Centro Cultural de Coimbra',
+    city: 'Coimbra',
+    country: 'Portugal',
     description: 'Learn traditional crafts and cooking techniques from master artisans. Materials provided, suitable for beginners.',
     organizer: {
       id: 'org3',
@@ -179,11 +192,13 @@ export const SAMPLE_EVENTS: Event[] = [
       onSiteAvailable: true
     },
     coordinates: {
-      latitude: 48.815906273661504, 
-      longitude: 9.024082266173172,
+      latitude: 40.2033,
+      longitude: -8.4103,
     },
     image: 'https://tripjive.com/wp-content/uploads/2024/01/Tainan-traditional-crafts-and-workshops-for-hands-on-learning-experiences.jpg'
   },
+  
+  // SPAIN - Madrid
   {
     id: '4',
     title: 'Contemporary Dance Performance',
@@ -191,11 +206,13 @@ export const SAMPLE_EVENTS: Event[] = [
     schedule: [
       { date: '2025-06-05T19:30:00', endDate: '2025-06-05T21:00:00' }
     ],
-    location: 'Municipal Theater, Main Hall',
+    location: 'Teatro Real, Madrid',
+    city: 'Madrid',
+    country: 'Spain',
     description: 'An innovative dance performance combining traditional and modern techniques. Choreographed by Sofia Mendes and performed by the Municipal Dance Company.',
     organizer: {
       id: 'org4',
-      name: 'Municipal Theater',
+      name: 'Teatro Real',
       profileImage: 'https://example.com/theater.png'
     },
     professionals: ['Sofia Mendes (Choreographer)', 'Municipal Dance Company', 'Lighting Designer: Roberto Luz'],
@@ -208,11 +225,13 @@ export const SAMPLE_EVENTS: Event[] = [
       onSiteAvailable: true
     },
     coordinates: {
-      latitude: 48.818507,
-      longitude: 9.027529,
+      latitude: 40.4168,
+      longitude: -3.7038,
     },
     image: 'https://dt7savnbjquj3.cloudfront.net/_imager/files/442108/MAK01_9eed5a99b701ba360780d44a67c674dc.jpg'
   },
+  
+  // SPAIN - Barcelona
   {
     id: '5',
     title: 'Literary Evening: Local Authors',
@@ -220,7 +239,9 @@ export const SAMPLE_EVENTS: Event[] = [
     schedule: [
       { date: '2025-05-22T18:00:00', endDate: '2025-05-22T20:30:00' }
     ],
-    location: 'Municipal Library, Reading Room',
+    location: 'Biblioteca Nacional de Catalunya, Barcelona',
+    city: 'Barcelona',
+    country: 'Spain',
     description: 'Join us for readings and discussions with local authors. Books will be available for purchase and signing.',
     organizer: {
       id: 'org5',
@@ -234,10 +255,380 @@ export const SAMPLE_EVENTS: Event[] = [
       onSiteAvailable: true
     },
     coordinates: {
-      latitude: 48.716607,
-      longitude: 9.025166,
+      latitude: 41.3851,
+      longitude: 2.1734,
     },
     image: 'https://www.herechattanooga.com/wp-content/uploads/2025/02/ishmael-reed-event.webp.webp'
+  },
+  
+  // FRANCE - Paris
+  {
+    id: '6',
+    title: 'Photography Workshop: Street Photography',
+    type: 'workshop',
+    schedule: [
+      { date: '2025-07-10T09:00:00', endDate: '2025-07-10T17:00:00' }
+    ],
+    location: 'Centre Pompidou, Paris',
+    city: 'Paris',
+    country: 'France',
+    description: 'Master the art of street photography with professional photographer Jean-Pierre Dubois. Walk through Paris and capture the essence of urban life.',
+    organizer: {
+      id: 'org6',
+      name: 'Centre Pompidou',
+      profileImage: 'https://example.com/pompidou.png'
+    },
+    professionals: ['Jean-Pierre Dubois (Photographer)', 'Marie Claire (Assistant)'],
+    accessibility: ['wheelchair', 'restroom'],
+    ticketInfo: {
+      type: 'paid',
+      price: 45,
+      currency: 'EUR',
+      purchaseLink: 'https://tickets.example.com/photo',
+      onSiteAvailable: false
+    },
+    coordinates: {
+      latitude: 48.8606,
+      longitude: 2.3522,
+    },
+    image: 'https://tripjive.com/wp-content/uploads/2024/01/Tainan-traditional-crafts-and-workshops-for-hands-on-learning-experiences.jpg'
+  },
+  
+  // FRANCE - Lyon
+  {
+    id: '7',
+    title: 'Jazz Night at the Opera',
+    type: 'music',
+    schedule: [
+      { date: '2025-08-15T20:00:00', endDate: '2025-08-15T23:00:00' }
+    ],
+    location: 'Opéra de Lyon',
+    city: 'Lyon',
+    country: 'France',
+    description: 'Exceptional jazz evening featuring the Lyon Jazz Quartet and special guest vocalist Isabelle Moreau.',
+    organizer: {
+      id: 'org7',
+      name: 'Opéra de Lyon',
+      profileImage: 'https://example.com/opera.png'
+    },
+    professionals: ['Lyon Jazz Quartet', 'Isabelle Moreau (Vocalist)', 'Claude Bernard (Sound Engineer)'],
+    accessibility: ['wheelchair', 'hearing', 'seating'],
+    ticketInfo: {
+      type: 'paid',
+      price: 35,
+      currency: 'EUR',
+      purchaseLink: 'https://tickets.example.com/jazz',
+      onSiteAvailable: true
+    },
+    coordinates: {
+      latitude: 45.7640,
+      longitude: 4.8357,
+    },
+    image: 'https://youthincmag.com/wp-content/uploads/2019/02/Top-10-Colege-Fests-India.jpg'
+  },
+  
+  // ITALY - Roma
+  {
+    id: '8',
+    title: 'Classical Theater: Romeo and Juliet',
+    type: 'theater',
+    schedule: [
+      { date: '2025-09-12T19:00:00', endDate: '2025-09-12T22:00:00' },
+      { date: '2025-09-13T19:00:00', endDate: '2025-09-13T22:00:00' }
+    ],
+    location: 'Teatro dell\'Opera di Roma',
+    city: 'Roma',
+    country: 'Italy',
+    description: 'Shakespeare\'s timeless tragedy performed by the renowned Roma Theater Company. Directed by Alessandro Gassmann.',
+    organizer: {
+      id: 'org8',
+      name: 'Teatro dell\'Opera di Roma',
+      profileImage: 'https://example.com/opera-roma.png'
+    },
+    professionals: ['Alessandro Gassmann (Director)', 'Roma Theater Company', 'Costume Designer: Lucia Vestri'],
+    accessibility: ['wheelchair', 'hearing', 'seating'],
+    ticketInfo: {
+      type: 'paid',
+      price: 28,
+      currency: 'EUR',
+      purchaseLink: 'https://tickets.example.com/romeo',
+      onSiteAvailable: true
+    },
+    coordinates: {
+      latitude: 41.9028,
+      longitude: 12.4964,
+    },
+    image: 'https://dt7savnbjquj3.cloudfront.net/_imager/files/442108/MAK01_9eed5a99b701ba360780d44a67c674dc.jpg'
+  },
+  
+  // ITALY - Milano
+  {
+    id: '9',
+    title: 'Fashion Design Exhibition',
+    type: 'exhibition',
+    schedule: [
+      { date: '2025-09-20T10:00:00', endDate: '2025-09-20T19:00:00' },
+      { date: '2025-09-21T10:00:00', endDate: '2025-09-21T19:00:00' },
+      { date: '2025-09-22T10:00:00', endDate: '2025-09-22T19:00:00' }
+    ],
+    location: 'Palazzo Reale, Milano',
+    city: 'Milano',
+    country: 'Italy',
+    description: 'Explore 50 years of Italian fashion design. From Versace to Prada, discover the evolution of Italian style.',
+    organizer: {
+      id: 'org9',
+      name: 'Palazzo Reale',
+      profileImage: 'https://example.com/palazzo.png'
+    },
+    professionals: ['Francesca Alfano Miglietti (Curator)', 'Roberto Capucci (Featured Designer)'],
+    accessibility: ['wheelchair', 'hearing', 'parking', 'restroom'],
+    ticketInfo: {
+      type: 'paid',
+      price: 12,
+      currency: 'EUR',
+      purchaseLink: 'https://tickets.example.com/fashion',
+      onSiteAvailable: true
+    },
+    coordinates: {
+      latitude: 45.4642,
+      longitude: 9.1900,
+    },
+    image: 'https://www.bizzabo.com/wp-content/uploads/2021/09/event-marketing-examples-fundraising-gala-min.png'
+  },
+  
+  // GERMANY - Berlin
+  {
+    id: '10',
+    title: 'Electronic Music Festival',
+    type: 'festival',
+    schedule: [
+      { date: '2025-08-25T14:00:00', endDate: '2025-08-26T06:00:00' }
+    ],
+    location: 'Tempelhof Airport, Berlin',
+    city: 'Berlin',
+    country: 'Germany',
+    description: 'Two-day electronic music festival featuring top DJs from around the world. 6 stages, 48 hours of continuous music.',
+    organizer: {
+      id: 'org10',
+      name: 'Berlin Electronic',
+      profileImage: 'https://example.com/electronic.png'
+    },
+    professionals: ['Carl Cox', 'Nina Kraviz', 'Boris Brejcha', 'Charlotte de Witte'],
+    accessibility: ['wheelchair', 'restroom', 'seating'],
+    ticketInfo: {
+      type: 'paid',
+      price: 89,
+      currency: 'EUR',
+      purchaseLink: 'https://tickets.example.com/electronic',
+      onSiteAvailable: false
+    },
+    coordinates: {
+      latitude: 52.5200,
+      longitude: 13.4050,
+    },
+    image: 'https://youthincmag.com/wp-content/uploads/2019/02/Top-10-Colege-Fests-India.jpg'
+  },
+  
+  // GERMANY - München
+  {
+    id: '11',
+    title: 'Film Screening: Independent Cinema',
+    type: 'film',
+    schedule: [
+      { date: '2025-07-18T19:30:00', endDate: '2025-07-18T22:00:00' }
+    ],
+    location: 'Filmmuseum München',
+    city: 'München',
+    country: 'Germany',
+    description: 'Special screening of award-winning independent films from European directors. Q&A session with filmmakers.',
+    organizer: {
+      id: 'org11',
+      name: 'Filmmuseum München',
+      profileImage: 'https://example.com/film.png'
+    },
+    professionals: ['Hans Weingartner (Director)', 'Fatih Akin (Director)', 'Moderator: Klaus Lemke'],
+    accessibility: ['wheelchair', 'hearing'],
+    ticketInfo: {
+      type: 'paid',
+      price: 8,
+      currency: 'EUR',
+      purchaseLink: 'https://tickets.example.com/film',
+      onSiteAvailable: true
+    },
+    coordinates: {
+      latitude: 48.1351,
+      longitude: 11.5820,
+    },
+    image: 'https://www.herechattanooga.com/wp-content/uploads/2025/02/ishmael-reed-event.webp.webp'
+  },
+  
+  // UNITED KINGDOM - London
+  {
+    id: '12',
+    title: 'Shakespeare Festival',
+    type: 'theater',
+    schedule: [
+      { date: '2025-06-14T19:00:00', endDate: '2025-06-14T22:30:00' },
+      { date: '2025-06-15T14:00:00', endDate: '2025-06-15T17:30:00' },
+      { date: '2025-06-15T19:00:00', endDate: '2025-06-15T22:30:00' }
+    ],
+    location: 'Globe Theatre, London',
+    city: 'London',
+    country: 'United Kingdom',
+    description: 'Three-day celebration of Shakespeare\'s works. Multiple plays performed by the Royal Shakespeare Company.',
+    organizer: {
+      id: 'org12',
+      name: 'Globe Theatre',
+      profileImage: 'https://example.com/globe.png'
+    },
+    professionals: ['Royal Shakespeare Company', 'Kenneth Branagh (Guest Director)', 'Judi Dench (Special Guest)'],
+    accessibility: ['wheelchair', 'hearing', 'seating'],
+    ticketInfo: {
+      type: 'paid',
+      price: 42,
+      currency: 'GBP',
+      purchaseLink: 'https://tickets.example.com/shakespeare',
+      onSiteAvailable: true
+    },
+    coordinates: {
+      latitude: 51.5074,
+      longitude: -0.1278,
+    },
+    image: 'https://dt7savnbjquj3.cloudfront.net/_imager/files/442108/MAK01_9eed5a99b701ba360780d44a67c674dc.jpg'
+  },
+  
+  // NETHERLANDS - Amsterdam
+  {
+    id: '13',
+    title: 'Contemporary Art Fair',
+    type: 'exhibition',
+    schedule: [
+      { date: '2025-10-05T10:00:00', endDate: '2025-10-05T20:00:00' },
+      { date: '2025-10-06T10:00:00', endDate: '2025-10-06T20:00:00' },
+      { date: '2025-10-07T10:00:00', endDate: '2025-10-07T18:00:00' }
+    ],
+    location: 'RAI Amsterdam',
+    city: 'Amsterdam',
+    country: 'Netherlands',
+    description: 'Annual contemporary art fair featuring 200+ galleries from around the world. Discover emerging and established artists.',
+    organizer: {
+      id: 'org13',
+      name: 'Art Amsterdam Foundation',
+      profileImage: 'https://example.com/artfair.png'
+    },
+    professionals: ['Various International Galleries', 'Roos Schurman (Curator)', 'Willem de Kooning Foundation'],
+    accessibility: ['wheelchair', 'hearing', 'parking', 'restroom'],
+    ticketInfo: {
+      type: 'paid',
+      price: 22,
+      currency: 'EUR',
+      purchaseLink: 'https://tickets.example.com/artfair',
+      onSiteAvailable: true
+    },
+    coordinates: {
+      latitude: 52.3676,
+      longitude: 4.9041,
+    },
+    image: 'https://www.bizzabo.com/wp-content/uploads/2021/09/event-marketing-examples-fundraising-gala-min.png'
+  },
+  
+  // BELGIUM - Brussels
+  {
+    id: '14',
+    title: 'International Dance Workshop',
+    type: 'workshop',
+    schedule: [
+      { date: '2025-11-12T10:00:00', endDate: '2025-11-12T18:00:00' },
+      { date: '2025-11-13T10:00:00', endDate: '2025-11-13T18:00:00' }
+    ],
+    location: 'Théâtre Royal de la Monnaie, Brussels',
+    city: 'Brussels',
+    country: 'Belgium',
+    description: 'Two-day intensive workshop with international choreographers. Learn contemporary, classical, and folk dance techniques.',
+    organizer: {
+      id: 'org14',
+      name: 'European Dance Collective',
+      profileImage: 'https://example.com/dance.png'
+    },
+    professionals: ['Anne Teresa de Keersmaeker (Choreographer)', 'Akram Khan (Guest Teacher)', 'Sidi Larbi Cherkaoui'],
+    accessibility: ['wheelchair', 'restroom'],
+    ticketInfo: {
+      type: 'paid',
+      price: 95,
+      currency: 'EUR',
+      purchaseLink: 'https://tickets.example.com/dance-workshop',
+      onSiteAvailable: false
+    },
+    coordinates: {
+      latitude: 50.8503,
+      longitude: 4.3517,
+    },
+    image: 'https://tripjive.com/wp-content/uploads/2024/01/Tainan-traditional-crafts-and-workshops-for-hands-on-learning-experiences.jpg'
+  },
+  
+  // More PORTUGAL events
+  {
+    id: '15',
+    title: 'Fado Night in the Old Town',
+    type: 'music',
+    schedule: [
+      { date: '2025-12-03T21:00:00', endDate: '2025-12-03T23:30:00' }
+    ],
+    location: 'Casa de Fado, Lisboa',
+    city: 'Lisboa',
+    country: 'Portugal',
+    description: 'Authentic Fado performance in historic Alfama district. Traditional Portuguese music with renowned fadistas.',
+    organizer: {
+      id: 'org15',
+      name: 'Casa de Fado',
+      profileImage: 'https://example.com/fado.png'
+    },
+    professionals: ['Amália Today (Fadista)', 'Carlos do Carmo Jr. (Guitarist)', 'Teresa Salgueiro'],
+    accessibility: ['hearing'],
+    ticketInfo: {
+      type: 'paid',
+      price: 18,
+      currency: 'EUR',
+      purchaseLink: 'https://tickets.example.com/fado',
+      onSiteAvailable: true
+    },
+    coordinates: {
+      latitude: 38.7139,
+      longitude: -9.1394,
+    },
+    image: 'https://youthincmag.com/wp-content/uploads/2019/02/Top-10-Colege-Fests-India.jpg'
+  },
+  
+  {
+    id: '16',
+    title: 'Portuguese Tile Painting Workshop',
+    type: 'workshop',
+    schedule: [
+      { date: '2025-08-08T14:00:00', endDate: '2025-08-08T17:00:00' }
+    ],
+    location: 'Museu Nacional do Azulejo, Lisboa',
+    city: 'Lisboa',
+    country: 'Portugal',
+    description: 'Learn the traditional art of Portuguese azulejo tile painting. Create your own decorative tiles to take home.',
+    organizer: {
+      id: 'org16',
+      name: 'Museu Nacional do Azulejo',
+      profileImage: 'https://example.com/azulejo.png'
+    },
+    professionals: ['Master Ceramist João Cutileiro', 'Tile Artist Maria Keil Foundation'],
+    accessibility: ['wheelchair', 'parking', 'restroom'],
+    ticketInfo: {
+      type: 'paid',
+      price: 32,
+      currency: 'EUR',
+      purchaseLink: 'https://tickets.example.com/azulejo',
+      onSiteAvailable: true
+    },
+    coordinates: {
+      latitude: 38.7139,
+      longitude: -9.1394,
+    },
+    image: 'https://tripjive.com/wp-content/uploads/2024/01/Tainan-traditional-crafts-and-workshops-for-hands-on-learning-experiences.jpg'
   }
 ];
 
@@ -318,18 +709,21 @@ export const EventProvider: React.FC<{children: React.ReactNode}> = ({ children 
       const passesTypeFilter = filters.selectedTypes.includes('all') || 
                               filters.selectedTypes.includes(event.type);
       
+      // Country filter: only show events from selected country
+      const passesCountryFilter = event.country === filters.selectedCountry;
+      
       // City filter: event passes if 'all' is selected or its city matches
       const passesCityFilter = filters.selectedCity === 'all' || 
-                              event.location.toLowerCase().includes(filters.selectedCity.toLowerCase());
+                              event.city === filters.selectedCity;
       
       // Map filter: when enabled, use distance-based filtering (mocked implementation)
       const passesMapFilter = !filters.mapFilterEnabled || 
                              (event.id.charCodeAt(0) % 2 === 0); // Mock implementation
       
       // Event must pass ALL filters
-      return passesTypeFilter && passesCityFilter && passesMapFilter;
+      return passesTypeFilter && passesCountryFilter && passesCityFilter && passesMapFilter;
     });
-  }, [events, filters.selectedTypes, filters.selectedCity, filters.mapFilterEnabled]);
+  }, [events, filters.selectedTypes, filters.selectedCountry, filters.selectedCity, filters.mapFilterEnabled]);
 
   const hasActiveTypeFilters = useMemo(() => {
     return !(filters.selectedTypes.length === 1 && filters.selectedTypes.includes('all')) ||

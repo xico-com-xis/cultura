@@ -237,9 +237,69 @@ export default function MapScreen() {
     }
   };
 
-  // Continue drawing as finger moves
+  // State to track touch gestures with tolerance
+  const [touchCount, setTouchCount] = useState(0);
+  const [firstTouchTime, setFirstTouchTime] = useState(0);
+  const [isMultiTouch, setIsMultiTouch] = useState(false);
+  const touchTimeoutRef = useRef<number | null>(null);
+
+  // Multi-touch tolerance in milliseconds
+  const MULTI_TOUCH_TOLERANCE = 200;
+
+  // Handle touch start - track number of fingers with tolerance
+  const handleTouchStart = (event: any) => {
+    const touches = event.nativeEvent.touches?.length || 0;
+    const currentTime = Date.now();
+    
+    setTouchCount(touches);
+    
+    if (touches === 1) {
+      // First finger down - start tolerance timer
+      setFirstTouchTime(currentTime);
+      setIsMultiTouch(false);
+      
+      // Clear any existing timeout
+      if (touchTimeoutRef.current) {
+        clearTimeout(touchTimeoutRef.current);
+      }
+      
+      // Set a timeout to confirm single touch
+      touchTimeoutRef.current = setTimeout(() => {
+        if (touchCount === 1) {
+          setIsMultiTouch(false);
+        }
+      }, MULTI_TOUCH_TOLERANCE);
+      
+    } else if (touches >= 2) {
+      // Multiple fingers detected
+      setIsMultiTouch(true);
+      
+      // Clear the single touch timeout
+      if (touchTimeoutRef.current) {
+        clearTimeout(touchTimeoutRef.current);
+      }
+    }
+  };
+
+  // Handle touch end - reset touch count with tolerance
+  const handleTouchEnd = (event: any) => {
+    const touches = event.nativeEvent.touches?.length || 0;
+    setTouchCount(touches);
+    
+    if (touches === 0) {
+      // All fingers lifted - reset state
+      setIsMultiTouch(false);
+      setFirstTouchTime(0);
+      
+      if (touchTimeoutRef.current) {
+        clearTimeout(touchTimeoutRef.current);
+      }
+    }
+  };
+
+  // Continue drawing as finger moves - only with confirmed single finger
   const handleMapPanDrag = (event: any) => {
-    if (filters.drawingMode) {
+    if (filters.drawingMode && touchCount === 1 && !isMultiTouch) {
       const { coordinate } = event.nativeEvent;
       setPolygonCoords([...filters.polygonCoords, coordinate]);
     }
@@ -257,8 +317,13 @@ export default function MapScreen() {
     }    
   };
 
-  // Clear the current drawing
+  // Clear the current drawing (but stay in drawing mode)
   const clearDrawing = () => {
+    setPolygonCoords([]);
+  };
+
+  // Cancel drawing mode and clear everything
+  const cancelDrawing = () => {
     setPolygonCoords([]);
     setDrawingMode(false);
   };
@@ -311,8 +376,10 @@ export default function MapScreen() {
           }}
           onRegionChangeComplete={onRegionChange}
           onPanDrag={handleMapPanDrag}
-          scrollEnabled={!filters.drawingMode}
-          zoomEnabled={!filters.drawingMode}
+          onTouchStart={handleTouchStart}
+          onTouchEnd={handleTouchEnd}
+          scrollEnabled={!filters.drawingMode || (filters.drawingMode && touchCount >= 2)}
+          zoomEnabled={true}
           rotateEnabled={!filters.drawingMode}
           pitchEnabled={!filters.drawingMode}
         >
@@ -405,14 +472,6 @@ export default function MapScreen() {
         </View>
       </TouchableOpacity>
 
-      {/* Drawing mode indicator */}
-      {filters.drawingMode && (
-        <View style={styles.drawingIndicator}>
-          <Text style={styles.drawingIndicatorText}>Drawing Mode Active</Text>
-          <Text style={styles.drawingHint}>Drag your finger to draw</Text>
-        </View>
-      )}
-
       {/* Event toggle button */}
       <TouchableOpacity 
         style={[styles.eventToggleButton, { backgroundColor: showEvents ? '#808080' : Colors[colorScheme ?? 'light'].tint }]}
@@ -426,7 +485,7 @@ export default function MapScreen() {
       {filters.drawingMode && (
         <View style={[styles.controlsContainer, { paddingBottom: insets.bottom + 70 }]}>
           <TouchableOpacity style={[styles.controlButton,
-            {backgroundColor: 'rgba(255,0,0,0.2)'}
+            {backgroundColor: Colors[colorScheme ?? 'light'].tint}
             ]}
             onPress={toggleDrawingMode}
           >
@@ -441,11 +500,19 @@ export default function MapScreen() {
           </TouchableOpacity>
 
           <TouchableOpacity
-            style={[styles.controlButton, { backgroundColor: 'rgb(255, 0, 0)' }]}
+            style={[styles.controlButton, { backgroundColor: '#6B7280' }]}
             onPress={clearDrawing}
           >
             <IconSymbol size={24} name="trash" color="#fff" />
             <Text style={styles.buttonText}>Clear</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.controlButton, { backgroundColor: '#DC2626' }]}
+            onPress={cancelDrawing}
+          >
+            <IconSymbol size={24} name="xmark" color="#fff" />
+            <Text style={styles.buttonText}>Cancel</Text>
           </TouchableOpacity>
 
           {filters.savedPolygons.length > 0 && (
@@ -519,25 +586,6 @@ const styles = StyleSheet.create({
   buttonText: {
     color: '#ffffff',
     fontWeight: '600',
-  },
-  drawingIndicator: {
-    position: 'absolute',
-    top: 10,
-    alignSelf: 'center',
-    backgroundColor: 'rgba(0, 0, 0, 0.7)',
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-    borderRadius: 20,
-    alignItems: 'center',
-  },
-  drawingIndicatorText: {
-    color: '#ffffff',
-    fontWeight: 'bold',
-  },
-  drawingHint: {
-    color: '#ffffff',
-    fontSize: 12,
-    marginTop: 4,
   },
   calloutView: {
     backgroundColor: 'white',

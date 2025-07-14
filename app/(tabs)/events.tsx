@@ -1,5 +1,6 @@
+import { useNavigation } from '@react-navigation/native';
 import { useState } from 'react';
-import { Alert, FlatList, Modal, StyleSheet, TouchableOpacity, View } from 'react-native';
+import { FlatList, Modal, StyleSheet, TouchableOpacity, View } from 'react-native';
 
 import EventCard from '@/components/EventCard';
 import { ThemedText } from '@/components/ThemedText';
@@ -37,6 +38,7 @@ export default function EventsScreen() {
     availableCities
   } = useEvents();
   const colorScheme = useColorScheme();
+  const navigation = useNavigation();
   const [filterModalVisible, setFilterModalVisible] = useState(false);
   
   // Add temporary state variables for the modal
@@ -70,16 +72,18 @@ export default function EventsScreen() {
 
   // Handle draw area button press
   const handleDrawArea = () => {
-    setDrawingMode(true);
-    setShouldNavigateToMap(true);
-    setMapModalVisible(false);
-    
-    // Show user a message to go to map tab
-    Alert.alert(
-      "Drawing Mode Activated",
-      "Please go to the Map tab to draw your custom area filter.",
-      [{ text: "OK" }]
-    );
+    if (filters.drawingMode) {
+      // If drawing mode is active, cancel it
+      setDrawingMode(false);
+    } else {
+      // If drawing mode is not active, start it
+      setDrawingMode(true);
+      setShouldNavigateToMap(true);
+      setMapModalVisible(false);
+      
+      // Automatically navigate to map tab
+      navigation.navigate('map' as never);
+    }
   };
   
   // Check if category filters are active
@@ -89,7 +93,7 @@ export default function EventsScreen() {
 
   // Check if zone filters are active
   const areZoneFiltersActive = () => {
-    return filters.mapFilterEnabled || filters.selectedCity !== 'all';
+    return filters.mapFilterEnabled || filters.selectedCity !== 'all' || filters.drawingMode;
   };
 
   // Check if any filters are active (for overall logic)
@@ -99,15 +103,6 @@ export default function EventsScreen() {
   
   return (
     <ThemedView style={styles.container}>
-      {/* Drawing mode indicator */}
-      {filters.drawingMode && (
-        <View style={styles.drawingModeIndicator}>
-          <ThemedText style={styles.drawingModeText}>
-            ✏️ Drawing Mode Active - Go to Map tab to draw your area
-          </ThemedText>
-        </View>
-      )}
-      
       <ThemedView style={styles.header}>
         <View style={styles.headerActions}>
           {/* Filter button */}
@@ -361,11 +356,23 @@ export default function EventsScreen() {
             {/* Area Drawing Section */}
             <ThemedText style={styles.filterSectionTitle}>Draw Custom Area</ThemedText>
             <TouchableOpacity 
-              style={styles.drawAreaButton}
+              style={[
+                styles.drawAreaButton,
+                filters.drawingMode && styles.drawAreaButtonActive
+              ]}
               onPress={handleDrawArea}
             >
-              <IconSymbol name="pencil" size={20} color={Colors[colorScheme ?? 'light'].tint} />
-              <ThemedText style={styles.drawAreaButtonText}>Draw Area on Map</ThemedText>
+              <IconSymbol 
+                name={filters.drawingMode ? "xmark.circle" : "pencil"} 
+                size={20} 
+                color={filters.drawingMode ? '#DC2626' : Colors[colorScheme ?? 'light'].tint} 
+              />
+              <ThemedText style={[
+                styles.drawAreaButtonText,
+                filters.drawingMode && styles.drawAreaButtonTextActive
+              ]}>
+                {filters.drawingMode ? "Cancel Drawing Mode" : "Draw Area on Map"}
+              </ThemedText>
             </TouchableOpacity>
             
             {/* Apply Button */}
@@ -557,6 +564,13 @@ const styles = StyleSheet.create({
     color: Colors.light.tint,
     fontSize: 16,
     fontWeight: '600',
+  },
+  drawAreaButtonActive: {
+    borderColor: '#DC2626',
+    backgroundColor: 'rgba(220, 38, 38, 0.1)',
+  },
+  drawAreaButtonTextActive: {
+    color: '#DC2626',
   },
   drawingModeIndicator: {
     backgroundColor: Colors.light.tint,
