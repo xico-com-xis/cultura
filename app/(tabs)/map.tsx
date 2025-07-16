@@ -379,7 +379,7 @@ export default function MapScreen() {
             <Marker
               key={cluster.id}
               coordinate={cluster.coordinate}
-              pinColor={cluster.count === 1 ? Colors[colorScheme ?? 'light'].tint : undefined}
+              pinColor={cluster.count === 1 ? 'pink' : undefined}
               onPress={() => cluster.count > 1 
                 ? handleClusterPress(cluster) 
                 : handleIndividualEventPress(cluster.events[0])
@@ -390,7 +390,7 @@ export default function MapScreen() {
                 <View style={[
                   styles.clusterMarker,
                   { 
-                    backgroundColor: Colors[colorScheme ?? 'light'].tint,
+                    backgroundColor: 'pink',
                     width: Math.min(40 + (cluster.count * 2), 70),
                     height: Math.min(40 + (cluster.count * 2), 70),
                     borderRadius: Math.min(20 + (cluster.count * 1), 35),
