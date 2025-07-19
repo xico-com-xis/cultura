@@ -1,9 +1,10 @@
 import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
 import { useFonts } from 'expo-font';
-import { Redirect, Stack } from 'expo-router';
+import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import 'react-native-reanimated';
 
+import { AuthProvider } from '@/context/AuthContext';
 import { EventProvider } from '@/context/EventsContext';
 import { useColorScheme } from '@/hooks/useColorScheme';
 
@@ -18,20 +19,19 @@ export default function RootLayout() {
     return null;
   }
 
-  // Redirect to events tab as the default route
   return (
     <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-      {/* Add this redirect */}
-      <Redirect href="/(tabs)/events" />
-      <EventProvider>
-        <Stack>
-          <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-          <Stack.Screen name="event/[id]" options={{ headerShown: false }} />
-          <Stack.Screen name="+not-found" />
-        </Stack>
-      <StatusBar style="auto" />
-      </EventProvider>
-
+      <AuthProvider>
+        <EventProvider>
+          <Stack>
+            <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+            <Stack.Screen name="auth/login" options={{ headerShown: false }} />
+            <Stack.Screen name="event/[id]" options={{ headerShown: false }} />
+            <Stack.Screen name="+not-found" />
+          </Stack>
+          <StatusBar style="auto" />
+        </EventProvider>
+      </AuthProvider>
     </ThemeProvider>
   );
 }
