@@ -1,12 +1,14 @@
 import { useNavigation } from '@react-navigation/native';
 import { useState } from 'react';
-import { FlatList, Modal, StyleSheet, TouchableOpacity, View } from 'react-native';
+import { Alert, FlatList, Modal, RefreshControl, StyleSheet, TouchableOpacity, View } from 'react-native';
 
+import CreateEventForm from '@/components/CreateEventForm';
 import EventCard from '@/components/EventCard';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { Colors } from '@/constants/Colors';
+import { useAuth } from '@/context/AuthContext';
 import { EventType, useEvents } from '@/context/EventsContext';
 import { useColorScheme } from '@/hooks/useColorScheme';
 
@@ -36,11 +38,16 @@ export default function EventsScreen() {
     setSelectedCity,
     setPolygonCoords,
     setShouldNavigateToMap,
-    availableCities
+    availableCities,
+    refreshEvents,
+    loading
   } = useEvents();
+  const { user } = useAuth();
   const colorScheme = useColorScheme();
   const navigation = useNavigation();
   const [filterModalVisible, setFilterModalVisible] = useState(false);
+  const [createEventModalVisible, setCreateEventModalVisible] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   
   // Add temporary state variables for the modal
   const [tempSelectedTypes, setTempSelectedTypes] = useState<Array<EventType | 'all'>>(['all']);
@@ -104,6 +111,19 @@ export default function EventsScreen() {
   // Check if any filters are active (for overall logic)
   const areFiltersActive = () => {
     return areCategoryFiltersActive() || areZoneFiltersActive();
+  };
+
+  // Handle pull-to-refresh
+  const onRefresh = async () => {
+    setIsRefreshing(true);
+    try {
+      await refreshEvents();
+    } catch (error) {
+      console.error('Error refreshing events:', error);
+      Alert.alert('Error', 'Failed to refresh events. Please try again.');
+    } finally {
+      setIsRefreshing(false);
+    }
   };
   
   return (
@@ -182,10 +202,20 @@ export default function EventsScreen() {
         keyExtractor={item => item.id}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.listContent}
+        refreshControl={
+          <RefreshControl
+            refreshing={isRefreshing}
+            onRefresh={onRefresh}
+            colors={[Colors[colorScheme ?? 'light'].tint]}
+            tintColor={Colors[colorScheme ?? 'light'].tint}
+            title="Pull to refresh events..."
+            titleColor={Colors[colorScheme ?? 'light'].text}
+          />
+        }
         ListEmptyComponent={
           <ThemedView style={styles.emptyContainer}>
             <ThemedText style={styles.emptyText}>
-              No events match your filters
+              {loading ? 'Loading events...' : 'No events match your filters'}
             </ThemedText>
           </ThemedView>
         }
@@ -398,6 +428,70 @@ export default function EventsScreen() {
             >
               <ThemedText style={styles.applyButtonText}>Apply Zone Filter</ThemedText>
             </TouchableOpacity>
+          </ThemedView>
+        </View>
+      </Modal>
+
+      {/* Floating Action Button */}
+      <TouchableOpacity 
+        style={[
+          styles.fab,
+          {
+            backgroundColor: user 
+              ? Colors[colorScheme ?? 'light'].tint 
+              : Colors[colorScheme ?? 'light'].tint + '30',
+            zIndex: 9999, // Force to top
+          },
+          !user && styles.fabDisabled
+        ]}
+        onPress={() => {
+          if (user) {
+            setCreateEventModalVisible(true);
+          } else {
+            Alert.alert('Login Required', 'Please sign in to create events');
+          }
+        }}
+        activeOpacity={user ? 0.7 : 0.5}
+      >
+        <IconSymbol 
+          name="plus" 
+          size={24} 
+          color={user ? '#fff' : '#fff'} 
+        />
+      </TouchableOpacity>
+
+      {/* Create Event Modal */}
+      <View 
+        style={[
+          styles.modalOverlay,
+          createEventModalVisible && { backgroundColor: 'rgb(0, 0, 0)' }
+        ]}
+        pointerEvents={createEventModalVisible ? 'auto' : 'none'}
+      ></View>
+      <Modal
+        animationType="slide"
+        transparent={true}
+        visible={createEventModalVisible}
+        onRequestClose={() => setCreateEventModalVisible(false)}
+      >
+        <View style={styles.modalContainer}>
+          <ThemedView style={[styles.createEventModalContent, { backgroundColor: Colors[colorScheme ?? 'light'].background }]}>
+            <View style={styles.createEventModalHeader}>
+              <ThemedText type="title" style={styles.modalTitle}>Create Event</ThemedText>
+              <TouchableOpacity 
+                style={styles.typeButton}
+                onPress={() => setCreateEventModalVisible(false)}
+              >
+                <IconSymbol name="xmark" size={24} color={Colors[colorScheme ?? 'light'].text} />
+              </TouchableOpacity>
+            </View>
+            
+            <CreateEventForm 
+              onClose={() => setCreateEventModalVisible(false)}
+              onEventCreated={() => {
+                // Event was created successfully, modal will close automatically
+              }}
+            />
           </ThemedView>
         </View>
       </Modal>
@@ -623,5 +717,40 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: 'bold',
     color: '#666',
+  },
+  fab: {
+    position: 'absolute',
+    bottom: 110,
+    right: 30,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    justifyContent: 'center',
+    alignItems: 'center',
+    elevation: 10,
+    zIndex: 9999,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.6,
+    shadowRadius: 5,
+  },
+  fabDisabled: {
+    elevation: 3,
+    shadowOpacity: 0.15,
+    opacity: 0.7,
+  },
+  createEventModalContent: {
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    maxHeight: '90%',
+    flex: 1,
+  },
+  createEventModalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(0, 0, 0, 0.1)',
   },
 });

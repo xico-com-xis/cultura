@@ -290,6 +290,13 @@ export default function ProfileScreen() {
           </ThemedView>
 
           {/* Country Selection Modal */}
+          <View 
+            style={[
+              styles.modalOverlay,
+              countryModalVisible && { backgroundColor: 'rgb(0, 0, 0)' }
+            ]}
+            pointerEvents={countryModalVisible ? 'auto' : 'none'}
+          ></View>
           <Modal
             visible={countryModalVisible}
             animationType="slide"
@@ -488,7 +495,15 @@ const styles = StyleSheet.create({
   modalContainer: {
     flex: 1,
     justifyContent: 'flex-end',
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    backgroundColor: 'transparent',
+  },
+  modalOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    opacity: 0.5,
   },
   modalContent: {
     borderTopLeftRadius: 20,

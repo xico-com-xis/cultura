@@ -19,14 +19,34 @@ const accessibilityIcons: Record<AccessibilityFeature, string> = {
 
 export default function EventDetailScreen() {
   const { id } = useLocalSearchParams();
-  const { events } = useEvents();
+  const { events, loading } = useEvents();
+  
+  console.log('Event detail - ID from params:', id);
+  console.log('Event detail - All events:', events.map(e => ({ id: e.id, title: e.title })));
+  console.log('Event detail - Loading state:', loading);
   
   const event = events.find(e => e.id === id);
+  
+  console.log('Event detail - Found event:', event ? event.title : 'NOT FOUND');
+  
+  if (loading) {
+    return (
+      <ThemedView style={styles.container}>
+        <ThemedText>Loading event...</ThemedText>
+      </ThemedView>
+    );
+  }
   
   if (!event) {
     return (
       <ThemedView style={styles.container}>
         <ThemedText>Event not found</ThemedText>
+        <ThemedText>
+          Looking for ID: {id}
+        </ThemedText>
+        <ThemedText>
+          Available events: {events.length}
+        </ThemedText>
       </ThemedView>
     );
   }

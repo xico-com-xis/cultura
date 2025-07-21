@@ -1,4 +1,6 @@
-import React, { createContext, useContext, useMemo, useState } from 'react';
+import { supabase } from '@/lib/supabase';
+import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
+import { useAuth } from './AuthContext';
 
 // Point-in-polygon algorithm (ray casting)
 const isPointInPolygon = (point: { latitude: number; longitude: number }, polygon: Array<{ latitude: number; longitude: number }>): boolean => {
@@ -100,6 +102,7 @@ type FilterState = {
 type EventsContextType = {
   events: Event[];
   setEvents: React.Dispatch<React.SetStateAction<Event[]>>;
+  addEvent: (event: Omit<Event, 'id'>) => Promise<void>;
   filters: FilterState;
   setSelectedTypes: (types: Array<EventType | 'all'>) => void;
   setMapFilterEnabled: (enabled: boolean) => void;
@@ -113,6 +116,8 @@ type EventsContextType = {
   hasActiveTypeFilters: boolean;
   availableCities: string[];
   availableCountries: string[];
+  loading: boolean;
+  refreshEvents: () => Promise<void>;
 };
 
 
@@ -656,7 +661,9 @@ export const SAMPLE_EVENTS: Event[] = [
 const EventsContext = createContext<EventsContextType | undefined>(undefined);
 
 export const EventProvider: React.FC<{children: React.ReactNode}> = ({ children }) => {
-  const [events, setEvents] = useState<Event[]>(SAMPLE_EVENTS);
+  const [events, setEvents] = useState<Event[]>([]);
+  const [loading, setLoading] = useState<boolean>(true);
+  const { user } = useAuth();
   
   // Add filter state
   const [filters, setFilters] = useState<FilterState>({
@@ -669,6 +676,141 @@ export const EventProvider: React.FC<{children: React.ReactNode}> = ({ children 
     shouldNavigateToMap: false,
     selectedCountry: 'Portugal', // Default country
   });
+
+  // Transform database response to Event type
+  const transformEventData = (dbEvent: any): Event => {
+    return {
+      id: dbEvent.id,
+      title: dbEvent.title,
+      type: dbEvent.type as EventType,
+      schedule: dbEvent.event_schedules?.map((schedule: any) => ({
+        date: schedule.start_date, // Correct column name
+        endDate: schedule.end_date
+      })) || [],
+      location: dbEvent.location,
+      city: dbEvent.city,
+      country: dbEvent.country,
+      description: dbEvent.description || '',
+      organizer: {
+        id: dbEvent.created_by || 'unknown',
+        name: 'Event Organizer', // We don't have organizer name in the schema
+        profileImage: undefined
+      },
+      professionals: [], // We don't store this in the basic schema
+      accessibility: dbEvent.event_accessibility?.map((feature: any) => feature.feature as AccessibilityFeature) || [],
+      ticketInfo: dbEvent.event_tickets?.[0] ? {
+        type: dbEvent.event_tickets[0].type as 'free' | 'paid' | 'donation',
+        price: dbEvent.event_tickets[0].price || undefined,
+        currency: dbEvent.event_tickets[0].currency || undefined,
+        purchaseLink: dbEvent.event_tickets[0].purchase_link || undefined,
+        onSiteAvailable: dbEvent.event_tickets[0].on_site_available || false
+      } : {
+        type: 'free'
+      },
+      coordinates: dbEvent.coordinates_lat && dbEvent.coordinates_lng ? {
+        latitude: parseFloat(dbEvent.coordinates_lat),
+        longitude: parseFloat(dbEvent.coordinates_lng)
+      } : undefined,
+      image: dbEvent.image_url || undefined
+    };
+  };
+
+  // Fetch events from Supabase
+  const fetchEvents = async () => {
+    try {
+      setLoading(true);
+      console.log('Fetching events from Supabase...');
+      
+      // Test basic connection first
+      const { data: testData, error: testError } = await supabase
+        .from('events')
+        .select('*')
+        .limit(5);
+      
+      if (testError) {
+        console.error('Basic connection test failed:', testError);
+        setEvents(SAMPLE_EVENTS);
+        return;
+      }
+
+      console.log('Basic connection test passed, got events:', testData?.length || 0);
+
+      // Try the RPC function
+      const { data, error } = await supabase.rpc('get_events_with_details');
+      
+      if (error) {
+        console.error('RPC function error:', error);
+        console.log('Falling back to basic event fetch with manual joins...');
+        
+        // Fallback to basic query with manual joins
+        const { data: eventsData, error: eventsError } = await supabase
+          .from('events')
+          .select(`
+            *,
+            event_schedules(*),
+            event_tickets(*),
+            event_accessibility(*)
+          `);
+        
+        if (eventsError) {
+          console.error('Manual query also failed:', eventsError);
+          setEvents(SAMPLE_EVENTS);
+          return;
+        }
+
+        if (eventsData) {
+          const transformedEvents = eventsData.map(transformEventData);
+          setEvents(transformedEvents);
+        }
+        return;
+      }
+
+      if (data) {
+        console.log('RPC function worked, got data:', data.length);
+        const transformedEvents = data.map(transformEventData);
+        setEvents(transformedEvents);
+      } else {
+        console.log('No data from RPC, using sample events');
+        setEvents(SAMPLE_EVENTS);
+      }
+    } catch (error) {
+      console.error('Error fetching events:', error);
+      // Fallback to sample events if database fails
+      setEvents(SAMPLE_EVENTS);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Refresh events (for manual refresh)
+  const refreshEvents = async () => {
+    await fetchEvents();
+  };
+
+  // Load events on component mount
+  useEffect(() => {
+    // Test Supabase connection
+    const testConnection = async () => {
+      try {
+        console.log('Testing Supabase connection...');
+        const { data, error } = await supabase
+          .from('events')
+          .select('count')
+          .limit(1);
+        
+        if (error) {
+          console.error('Supabase connection test failed:', error);
+        } else {
+          console.log('Supabase connection test successful');
+        }
+      } catch (err) {
+        console.error('Supabase connection test exception:', err);
+      }
+    };
+    
+    testConnection();
+    fetchEvents();
+  }, []);
 
   // Filter update methods
   const setSelectedTypes = (types: Array<EventType | 'all'>) => {
@@ -701,6 +843,151 @@ export const EventProvider: React.FC<{children: React.ReactNode}> = ({ children 
 
   const setSelectedCountry = (country: string) => {
     setFilters(prev => ({ ...prev, selectedCountry: country, selectedCity: 'all' })); // Reset city when country changes
+  };
+
+  // Add a new event to Supabase and update local state
+  const addEvent = async (eventData: Omit<Event, 'id'>) => {
+    if (!user) {
+      throw new Error('User must be logged in to create events');
+    }
+
+    console.log('Adding event with data:', eventData);
+    console.log('User info:', { id: user.id, email: user.email });
+
+    try {
+      // First, let's test if we can query the current user's session
+      const { data: { user: currentUser }, error: userError } = await supabase.auth.getUser();
+      
+      if (userError || !currentUser) {
+        console.error('User authentication issue:', userError);
+        throw new Error('Authentication failed. Please sign in again.');
+      }
+      
+      console.log('Current authenticated user:', { id: currentUser.id, email: currentUser.email });
+
+      // Now that we know the actual schema, create the correct payload
+      const eventPayload = {
+        title: eventData.title,
+        type: eventData.type,
+        description: eventData.description || 'No description provided', // Required field, provide default
+        location: eventData.location,
+        city: eventData.city,
+        country: eventData.country,
+        coordinates_lat: eventData.coordinates?.latitude || null,
+        coordinates_lng: eventData.coordinates?.longitude || null,
+        image_url: eventData.image || null,
+        created_by: currentUser.id, // This is the correct column name
+      };
+
+      console.log('Using correct schema payload:', eventPayload);
+
+      // Insert with the correct schema
+      const { data: eventRecord, error: eventError } = await supabase
+        .from('events')
+        .insert(eventPayload)
+        .select()
+        .single();
+
+      if (eventError) {
+        console.error('Insert failed with correct schema:', eventError);
+        console.error('Error details:', JSON.stringify(eventError, null, 2));
+        throw new Error(`Failed to create event: ${eventError.message || 'Unknown database error'}`);
+      }
+
+      console.log('Event created successfully with correct schema:', eventRecord);
+
+      // Insert schedules with correct column names
+      if (eventData.schedule && eventData.schedule.length > 0) {
+        console.log('Inserting schedules:', eventData.schedule);
+        const schedulePromises = eventData.schedule.map(async (schedule) => {
+          const { error } = await supabase
+            .from('event_schedules')
+            .insert({
+              event_id: eventRecord.id,
+              start_date: schedule.date, // Correct column name
+              end_date: schedule.endDate || null,
+            });
+          if (error) {
+            console.error('Schedule insertion error:', error);
+          }
+          return error;
+        });
+        
+        const scheduleResults = await Promise.all(schedulePromises);
+        const scheduleErrors = scheduleResults.filter(Boolean);
+        if (scheduleErrors.length > 0) {
+          console.warn('Some schedule insertions failed:', scheduleErrors);
+        }
+      }
+
+      // Insert ticket information with better error handling
+      if (eventData.ticketInfo) {
+        console.log('Inserting ticket info:', eventData.ticketInfo);
+        const { error: ticketError } = await supabase
+          .from('event_tickets')
+          .insert({
+            event_id: eventRecord.id,
+            type: eventData.ticketInfo.type,
+            price: eventData.ticketInfo.price || null,
+            currency: eventData.ticketInfo.currency || null,
+            purchase_link: eventData.ticketInfo.purchaseLink || null,
+            on_site_available: eventData.ticketInfo.onSiteAvailable || false,
+          });
+        
+        if (ticketError) {
+          console.error('Ticket insertion error:', ticketError);
+        }
+      }
+
+      // Insert accessibility features with correct column names
+      if (eventData.accessibility && eventData.accessibility.length > 0) {
+        console.log('Inserting accessibility features:', eventData.accessibility);
+        const accessibilityPromises = eventData.accessibility.map(async (featureType) => {
+          const { error } = await supabase
+            .from('event_accessibility')
+            .insert({
+              event_id: eventRecord.id,
+              feature: featureType, // Correct column name
+            });
+          if (error) {
+            console.error('Accessibility insertion error:', error);
+          }
+          return error;
+        });
+        
+        const accessibilityResults = await Promise.all(accessibilityPromises);
+        const accessibilityErrors = accessibilityResults.filter(Boolean);
+        if (accessibilityErrors.length > 0) {
+          console.warn('Some accessibility insertions failed:', accessibilityErrors);
+        }
+      }
+
+      // Create the new event object for local state
+      const newEvent: Event = {
+        id: eventRecord.id,
+        title: eventData.title,
+        type: eventData.type,
+        schedule: eventData.schedule,
+        location: eventData.location,
+        city: eventData.city,
+        country: eventData.country,
+        description: eventData.description,
+        organizer: eventData.organizer,
+        professionals: eventData.professionals || [],
+        accessibility: eventData.accessibility,
+        ticketInfo: eventData.ticketInfo,
+        coordinates: eventData.coordinates,
+        image: eventData.image,
+      };
+
+      // Add the new event to local state immediately
+      setEvents(prevEvents => [...prevEvents, newEvent]);
+      console.log('Event added to local state:', newEvent);
+
+    } catch (error) {
+      console.error('Error adding event:', error);
+      throw error;
+    }
   };
 
   // Calculate available cities based on selected country
@@ -758,7 +1045,8 @@ export const EventProvider: React.FC<{children: React.ReactNode}> = ({ children 
   return (
     <EventsContext.Provider value={{ 
       events, 
-      setEvents, 
+      setEvents,
+      addEvent, 
       filters,
       setSelectedTypes,
       setMapFilterEnabled,
@@ -771,7 +1059,9 @@ export const EventProvider: React.FC<{children: React.ReactNode}> = ({ children 
       filteredEvents,
       hasActiveTypeFilters,
       availableCities,
-      availableCountries
+      availableCountries,
+      loading,
+      refreshEvents
     }}>
       {children}
     </EventsContext.Provider>

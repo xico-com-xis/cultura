@@ -2,6 +2,7 @@ import { IconSymbol } from '@/components/ui/IconSymbol';
 import { Colors } from '@/constants/Colors';
 import { Event, useEvents } from '@/context/EventsContext';
 import { useColorScheme } from '@/hooks/useColorScheme';
+import { getCityDefaultCoordinates } from '@/utils/geocoding';
 import * as Location from 'expo-location';
 import { StatusBar } from 'expo-status-bar';
 import React, { useEffect, useRef, useState } from 'react';
@@ -255,29 +256,38 @@ export default function MapScreen() {
         >
           {/* Event markers */}
           {showEvents && (hasActiveTypeFilters ? filteredEvents : events)
-            .filter(event => event.coordinates)
-            .map(event => (
-              <Marker
-                key={event.id}
-                coordinate={event.coordinates!}
-                pinColor={Colors[colorScheme ?? 'light'].tint}
-                onPress={() => handleEventPress(event)}
-              >
-                <Callout tooltip>
-                  <View style={styles.calloutView}>
-                    <Text style={styles.calloutTitle}>
-                      {event.title || 'Event'}
-                    </Text>
-                    <Text style={styles.calloutDetails}>
-                      {event.location || 'Location not specified'}
-                    </Text>
-                    <Text style={styles.calloutDescription}>
-                      {event.description || 'No description available'}
-                    </Text>
-                  </View>
-                </Callout>
-              </Marker>
-            ))
+            .map(event => {
+              // Use coordinates from event or get default coordinates for the city
+              let coordinates = event.coordinates;
+              if (!coordinates && event.city) {
+                coordinates = getCityDefaultCoordinates(event.city) || undefined;
+              }
+              
+              // Only render if we have coordinates (either from event or default)
+              return coordinates ? (
+                <Marker
+                  key={event.id}
+                  coordinate={coordinates}
+                  pinColor={Colors[colorScheme ?? 'light'].tint}
+                  onPress={() => handleEventPress(event)}
+                >
+                  <Callout tooltip>
+                    <View style={styles.calloutView}>
+                      <Text style={styles.calloutTitle}>
+                        {event.title || 'Event'}
+                      </Text>
+                      <Text style={styles.calloutDetails}>
+                        {event.location || 'Location not specified'}
+                      </Text>
+                      <Text style={styles.calloutDescription}>
+                        {event.description || 'No description available'}
+                      </Text>
+                    </View>
+                  </Callout>
+                </Marker>
+              ) : null;
+            })
+            .filter(Boolean) // Remove null entries
           }
           
           {/* Current drawing polygon */}
