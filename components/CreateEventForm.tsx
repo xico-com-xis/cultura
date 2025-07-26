@@ -11,6 +11,7 @@ import {
     View,
 } from 'react-native';
 
+import ImagePickerComponent from '@/components/ImagePickerComponent';
 import LocationPicker from '@/components/LocationPicker';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
@@ -51,6 +52,7 @@ export default function CreateEventForm({ onClose, onEventCreated }: CreateEvent
   const [selectedType, setSelectedType] = useState<EventType>('other');
   const [location, setLocation] = useState('');
   const [selectedCity, setSelectedCity] = useState(availableCities[0] || '');
+  const [imageUrl, setImageUrl] = useState('');
   
   // Location state
   const [coordinates, setCoordinates] = useState<Coordinates | null>(null);
@@ -193,7 +195,7 @@ export default function CreateEventForm({ onClose, onEventCreated }: CreateEvent
         accessibility: [],
         ticketInfo,
         coordinates: eventCoordinates || undefined, // Convert null to undefined for type compatibility
-        image: undefined,
+        image: imageUrl || undefined, // Include the uploaded image URL
       };
 
       await addEvent(newEvent);
@@ -320,6 +322,19 @@ export default function CreateEventForm({ onClose, onEventCreated }: CreateEvent
     setShowLocationInput(false);
   };
 
+  const clearForm = () => {
+    setTitle('');
+    setDescription('');
+    setSelectedType('other');
+    setLocation('');
+    setImageUrl('');
+    setCoordinates(null);
+    setShowLocationInput(false);
+    setTicketType('free');
+    setTicketPrice('');
+    setPurchaseLink('');
+  };
+
   return (
     <ThemedView style={styles.container}>
       <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
@@ -395,6 +410,16 @@ export default function CreateEventForm({ onClose, onEventCreated }: CreateEvent
             maxLength={500}
           />
         </View>
+
+        {/* Image Upload */}
+        {user && (
+          <ImagePickerComponent
+            onImageSelected={setImageUrl}
+            currentImageUrl={imageUrl}
+            userId={user.id}
+            eventTitle={title}
+          />
+        )}
 
         {/* City Selection */}
         <View style={styles.inputContainer}>

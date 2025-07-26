@@ -40,6 +40,8 @@ export default function EventCard({ event }: EventCardProps) {
   };
   
   const navigateToEventDetails = () => {
+    console.log('EventCard - Navigating to event detail with ID:', event.id, 'Type:', typeof event.id);
+    console.log('EventCard - Event title:', event.title);
     router.push({
       pathname: '/event/[id]',
       params: { id: event.id }
@@ -50,7 +52,7 @@ export default function EventCard({ event }: EventCardProps) {
     <TouchableOpacity 
       style={[
         styles.card, 
-        { backgroundColor: Colors[colorScheme ?? 'light'].cardBackground }
+        { backgroundColor: Colors[colorScheme ?? 'light'].background }
       ]}
       onPress={navigateToEventDetails}
       activeOpacity={0.7}

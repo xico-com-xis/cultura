@@ -21,13 +21,9 @@ export default function EventDetailScreen() {
   const { id } = useLocalSearchParams();
   const { events, loading } = useEvents();
   
-  console.log('Event detail - ID from params:', id);
-  console.log('Event detail - All events:', events.map(e => ({ id: e.id, title: e.title })));
-  console.log('Event detail - Loading state:', loading);
-  
-  const event = events.find(e => e.id === id);
-  
-  console.log('Event detail - Found event:', event ? event.title : 'NOT FOUND');
+  // Convert id to string to ensure proper comparison
+  const eventId = String(id);
+  const event = events.find(e => String(e.id) === eventId);
   
   if (loading) {
     return (
@@ -36,22 +32,15 @@ export default function EventDetailScreen() {
       </ThemedView>
     );
   }
-  
+
   if (!event) {
     return (
       <ThemedView style={styles.container}>
         <ThemedText>Event not found</ThemedText>
-        <ThemedText>
-          Looking for ID: {id}
-        </ThemedText>
-        <ThemedText>
-          Available events: {events.length}
-        </ThemedText>
+        <ThemedText>Looking for ID: {id}</ThemedText>
       </ThemedView>
     );
-  }
-  
-  const formatDate = (dateStr: string) => {
+  }  const formatDate = (dateStr: string) => {
     try {
       const date = new Date(dateStr);
       return format(date, 'EEEE, MMMM d, yyyy • h:mm a');

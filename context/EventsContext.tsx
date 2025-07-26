@@ -102,7 +102,7 @@ type FilterState = {
 type EventsContextType = {
   events: Event[];
   setEvents: React.Dispatch<React.SetStateAction<Event[]>>;
-  addEvent: (event: Omit<Event, 'id'>) => Promise<void>;
+  addEvent: (event: Omit<Event, 'id'>) => Promise<Event>;
   filters: FilterState;
   setSelectedTypes: (types: Array<EventType | 'all'>) => void;
   setMapFilterEnabled: (enabled: boolean) => void;
@@ -715,11 +715,26 @@ export const EventProvider: React.FC<{children: React.ReactNode}> = ({ children 
     };
   };
 
+  // Smart merge function to combine local and database events
+  const mergeEventsSmartly = (currentEvents: Event[], databaseEvents: Event[]): Event[] => {
+    // Start with database events as the source of truth
+    const mergedEvents = [...databaseEvents];
+    
+    // Add any local events that aren't in the database yet
+    currentEvents.forEach(localEvent => {
+      const existsInDatabase = databaseEvents.some(dbEvent => dbEvent.id === localEvent.id);
+      if (!existsInDatabase) {
+        mergedEvents.push(localEvent);
+      }
+    });
+    
+    return mergedEvents;
+  };
+
   // Fetch events from Supabase
   const fetchEvents = async () => {
     try {
       setLoading(true);
-      console.log('Fetching events from Supabase...');
       
       // Test basic connection first
       const { data: testData, error: testError } = await supabase
@@ -733,14 +748,11 @@ export const EventProvider: React.FC<{children: React.ReactNode}> = ({ children 
         return;
       }
 
-      console.log('Basic connection test passed, got events:', testData?.length || 0);
-
       // Try the RPC function
       const { data, error } = await supabase.rpc('get_events_with_details');
       
       if (error) {
         console.error('RPC function error:', error);
-        console.log('Falling back to basic event fetch with manual joins...');
         
         // Fallback to basic query with manual joins
         const { data: eventsData, error: eventsError } = await supabase
@@ -760,22 +772,19 @@ export const EventProvider: React.FC<{children: React.ReactNode}> = ({ children 
 
         if (eventsData) {
           const transformedEvents = eventsData.map(transformEventData);
-          setEvents(transformedEvents);
+          setEvents(currentEvents => mergeEventsSmartly(currentEvents, transformedEvents));
         }
         return;
       }
 
       if (data) {
-        console.log('RPC function worked, got data:', data.length);
         const transformedEvents = data.map(transformEventData);
-        setEvents(transformedEvents);
+        setEvents(currentEvents => mergeEventsSmartly(currentEvents, transformedEvents));
       } else {
-        console.log('No data from RPC, using sample events');
         setEvents(SAMPLE_EVENTS);
       }
     } catch (error) {
       console.error('Error fetching events:', error);
-      // Fallback to sample events if database fails
       setEvents(SAMPLE_EVENTS);
     } finally {
       setLoading(false);
@@ -789,10 +798,13 @@ export const EventProvider: React.FC<{children: React.ReactNode}> = ({ children 
 
   // Load events on component mount
   useEffect(() => {
-    // Test Supabase connection
+    let isInitialized = false;
+    
     const testConnection = async () => {
+      if (isInitialized) return;
+      isInitialized = true;
+      
       try {
-        console.log('Testing Supabase connection...');
         const { data, error } = await supabase
           .from('events')
           .select('count')
@@ -800,16 +812,15 @@ export const EventProvider: React.FC<{children: React.ReactNode}> = ({ children 
         
         if (error) {
           console.error('Supabase connection test failed:', error);
-        } else {
-          console.log('Supabase connection test successful');
         }
       } catch (err) {
         console.error('Supabase connection test exception:', err);
       }
+      
+      fetchEvents();
     };
     
     testConnection();
-    fetchEvents();
   }, []);
 
   // Filter update methods
@@ -851,37 +862,27 @@ export const EventProvider: React.FC<{children: React.ReactNode}> = ({ children 
       throw new Error('User must be logged in to create events');
     }
 
-    console.log('Adding event with data:', eventData);
-    console.log('User info:', { id: user.id, email: user.email });
-
     try {
-      // First, let's test if we can query the current user's session
       const { data: { user: currentUser }, error: userError } = await supabase.auth.getUser();
       
       if (userError || !currentUser) {
         console.error('User authentication issue:', userError);
         throw new Error('Authentication failed. Please sign in again.');
       }
-      
-      console.log('Current authenticated user:', { id: currentUser.id, email: currentUser.email });
 
-      // Now that we know the actual schema, create the correct payload
       const eventPayload = {
         title: eventData.title,
         type: eventData.type,
-        description: eventData.description || 'No description provided', // Required field, provide default
+        description: eventData.description || 'No description provided',
         location: eventData.location,
         city: eventData.city,
         country: eventData.country,
         coordinates_lat: eventData.coordinates?.latitude || null,
         coordinates_lng: eventData.coordinates?.longitude || null,
         image_url: eventData.image || null,
-        created_by: currentUser.id, // This is the correct column name
+        created_by: currentUser.id,
       };
 
-      console.log('Using correct schema payload:', eventPayload);
-
-      // Insert with the correct schema
       const { data: eventRecord, error: eventError } = await supabase
         .from('events')
         .insert(eventPayload)
@@ -889,22 +890,18 @@ export const EventProvider: React.FC<{children: React.ReactNode}> = ({ children 
         .single();
 
       if (eventError) {
-        console.error('Insert failed with correct schema:', eventError);
-        console.error('Error details:', JSON.stringify(eventError, null, 2));
+        console.error('Failed to create event:', eventError);
         throw new Error(`Failed to create event: ${eventError.message || 'Unknown database error'}`);
       }
 
-      console.log('Event created successfully with correct schema:', eventRecord);
-
-      // Insert schedules with correct column names
+      // Insert schedules
       if (eventData.schedule && eventData.schedule.length > 0) {
-        console.log('Inserting schedules:', eventData.schedule);
         const schedulePromises = eventData.schedule.map(async (schedule) => {
           const { error } = await supabase
             .from('event_schedules')
             .insert({
               event_id: eventRecord.id,
-              start_date: schedule.date, // Correct column name
+              start_date: schedule.date,
               end_date: schedule.endDate || null,
             });
           if (error) {
@@ -920,9 +917,8 @@ export const EventProvider: React.FC<{children: React.ReactNode}> = ({ children 
         }
       }
 
-      // Insert ticket information with better error handling
+      // Insert ticket information
       if (eventData.ticketInfo) {
-        console.log('Inserting ticket info:', eventData.ticketInfo);
         const { error: ticketError } = await supabase
           .from('event_tickets')
           .insert({
@@ -939,15 +935,14 @@ export const EventProvider: React.FC<{children: React.ReactNode}> = ({ children 
         }
       }
 
-      // Insert accessibility features with correct column names
+      // Insert accessibility features
       if (eventData.accessibility && eventData.accessibility.length > 0) {
-        console.log('Inserting accessibility features:', eventData.accessibility);
         const accessibilityPromises = eventData.accessibility.map(async (featureType) => {
           const { error } = await supabase
             .from('event_accessibility')
             .insert({
               event_id: eventRecord.id,
-              feature: featureType, // Correct column name
+              feature: featureType,
             });
           if (error) {
             console.error('Accessibility insertion error:', error);
@@ -962,27 +957,58 @@ export const EventProvider: React.FC<{children: React.ReactNode}> = ({ children 
         }
       }
 
-      // Create the new event object for local state
-      const newEvent: Event = {
-        id: eventRecord.id,
+      console.log('Database returned event record:', eventRecord);
+      console.log('Event record ID:', eventRecord.id, 'Type:', typeof eventRecord.id);
+
+      // Create a properly formatted local event object that matches database structure
+      const localEvent: Event = {
+        id: String(eventRecord.id), // Ensure ID is always a string
         title: eventData.title,
         type: eventData.type,
-        schedule: eventData.schedule,
+        schedule: eventData.schedule || [],
         location: eventData.location,
         city: eventData.city,
         country: eventData.country,
         description: eventData.description,
-        organizer: eventData.organizer,
+        organizer: {
+          id: currentUser.id,
+          name: currentUser.user_metadata?.displayName || 'Event Organizer',
+          profileImage: undefined
+        },
         professionals: eventData.professionals || [],
-        accessibility: eventData.accessibility,
+        accessibility: eventData.accessibility || [],
         ticketInfo: eventData.ticketInfo,
         coordinates: eventData.coordinates,
         image: eventData.image,
       };
 
-      // Add the new event to local state immediately
-      setEvents(prevEvents => [...prevEvents, newEvent]);
-      console.log('Event added to local state:', newEvent);
+      // Add to local state immediately for instant UI update
+      setEvents(prevEvents => [...prevEvents, localEvent]);
+
+      // Background refresh to sync with database
+      setTimeout(async () => {
+        try {
+          const { data, error } = await supabase.rpc('get_events_with_details');
+          
+          if (error) {
+            console.error('Background refresh error:', error);
+            return;
+          }
+
+          if (data && data.length > 0) {
+            const transformedEvents: Event[] = data
+              .map(transformEventData)
+              .filter(Boolean) as Event[];
+            
+            setEvents(currentEvents => mergeEventsSmartly(currentEvents, transformedEvents));
+          }
+        } catch (error) {
+          console.error('Background refresh failed:', error);
+        }
+      }, 2000);
+
+      // Return the created event so the form can use it for navigation
+      return localEvent;
 
     } catch (error) {
       console.error('Error adding event:', error);
