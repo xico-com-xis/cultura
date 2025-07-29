@@ -20,6 +20,7 @@ interface ImagePickerComponentProps {
   currentImageUrl?: string;
   userId: string;
   eventTitle: string;
+  allowRemove?: boolean;
 }
 
 export default function ImagePickerComponent({
@@ -27,6 +28,7 @@ export default function ImagePickerComponent({
   currentImageUrl,
   userId,
   eventTitle,
+  allowRemove = true,
 }: ImagePickerComponentProps) {
   const colorScheme = useColorScheme();
   const [isUploading, setIsUploading] = useState(false);
@@ -122,6 +124,11 @@ export default function ImagePickerComponent({
   };
 
   const removeImage = () => {
+    if (!allowRemove) {
+      Alert.alert('Image Required', 'An image is required for all events.');
+      return;
+    }
+    
     Alert.alert(
       'Remove Image',
       'Are you sure you want to remove this image?',
@@ -142,9 +149,7 @@ export default function ImagePickerComponent({
   const displayImageUri = localImageUri || currentImageUrl;
 
   return (
-    <View style={styles.container}>
-      <ThemedText style={styles.label}>Event Image (Optional)</ThemedText>
-      
+    <View style={styles.container}>      
       {displayImageUri ? (
         <View style={styles.imageContainer}>
           <Image source={{ uri: displayImageUri }} style={styles.image} />
@@ -154,9 +159,11 @@ export default function ImagePickerComponent({
               <ThemedText style={styles.uploadingText}>Uploading...</ThemedText>
             </View>
           )}
-          <TouchableOpacity style={styles.removeButton} onPress={removeImage}>
-            <IconSymbol name="xmark.circle.fill" size={24} color="#ff3b30" />
-          </TouchableOpacity>
+          {allowRemove && (
+            <TouchableOpacity style={styles.removeButton} onPress={removeImage}>
+              <IconSymbol name="xmark.circle.fill" size={24} color="#ff3b30" />
+            </TouchableOpacity>
+          )}
         </View>
       ) : (
         <TouchableOpacity
@@ -180,10 +187,10 @@ export default function ImagePickerComponent({
                 color={Colors[colorScheme ?? 'light'].text + '60'} 
               />
               <ThemedText style={[styles.imagePickerText, { opacity: 0.6 }]}>
-                Tap to add image
+                Tap to add image *
               </ThemedText>
               <ThemedText style={[styles.imagePickerSubtext, { opacity: 0.4 }]}>
-                Choose from library or take photo
+                Required - Choose from library or take photo
               </ThemedText>
             </>
           )}

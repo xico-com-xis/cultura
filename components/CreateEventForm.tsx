@@ -1,14 +1,16 @@
 import DateTimePicker from '@react-native-community/datetimepicker';
 import React, { useEffect, useState } from 'react';
 import {
-    ActivityIndicator,
-    Alert,
-    Platform,
-    ScrollView,
-    StyleSheet,
-    TextInput,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  Alert,
+  Modal,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from 'react-native';
 
 import ImagePickerComponent from '@/components/ImagePickerComponent';
@@ -105,7 +107,8 @@ export default function CreateEventForm({ onClose, onEventCreated }: CreateEvent
     return title.trim() !== '' && 
            description.trim() !== '' && 
            selectedCity !== '' &&
-           coordinates !== null; // Precise location is now mandatory
+           coordinates !== null && // Precise location is now mandatory
+           imageUrl.trim() !== ''; // Image is now mandatory
   };
 
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -115,6 +118,8 @@ export default function CreateEventForm({ onClose, onEventCreated }: CreateEvent
       let errorMessage = 'Please fill in all required fields';
       if (!coordinates) {
         errorMessage = 'Please set a precise location using "Find Address" or "Pick on Map" buttons.';
+      } else if (!imageUrl.trim()) {
+        errorMessage = 'Please add an image for your event.';
       }
       Alert.alert('Error', errorMessage);
       return;
@@ -226,10 +231,14 @@ export default function CreateEventForm({ onClose, onEventCreated }: CreateEvent
   };
 
   const onDateChange = (event: any, selectedDate?: Date) => {
+    console.log('Date picker event:', event.type, 'Selected date:', selectedDate, 'Current date:', eventDate);
     const currentDate = selectedDate || eventDate;
-    setShowDatePicker(false);
     
-    if (event.type === 'set') {
+    if (Platform.OS === 'android') {
+      setShowDatePicker(false);
+    }
+    
+    if (event.type === 'set' || Platform.OS !== 'android') {
       // User confirmed the selection
       if (datePickerMode === 'date') {
         // Set the date part, keeping the current time
@@ -237,24 +246,36 @@ export default function CreateEventForm({ onClose, onEventCreated }: CreateEvent
         newDate.setFullYear(currentDate.getFullYear());
         newDate.setMonth(currentDate.getMonth());
         newDate.setDate(currentDate.getDate());
+        console.log('Setting new date:', newDate);
         setEventDate(newDate);
         
-        // Now show time picker
-        setTimeout(() => {
-          setDatePickerMode('time');
-          setShowDatePicker(true);
-        }, 300);
+        // On iOS, automatically show time picker after date selection
+        if (Platform.OS !== 'android') {
+          setTimeout(() => {
+            setDatePickerMode('time');
+            setShowDatePicker(true);
+          }, 300);
+        }
       } else {
         // Time mode - set the time part
         const newDate = new Date(eventDate);
         newDate.setHours(currentDate.getHours());
         newDate.setMinutes(currentDate.getMinutes());
+        console.log('Setting new time:', newDate);
         setEventDate(newDate);
         setDatePickerMode('date'); // Reset for next time
+        
+        if (Platform.OS !== 'android') {
+          setShowDatePicker(false);
+        }
       }
-    } else {
+    } else if (event.type === 'dismissed') {
       // User cancelled
+      console.log('Date picker dismissed');
       setDatePickerMode('date'); // Reset for next time
+      if (Platform.OS !== 'android') {
+        setShowDatePicker(false);
+      }
     }
   };
 
@@ -413,12 +434,16 @@ export default function CreateEventForm({ onClose, onEventCreated }: CreateEvent
 
         {/* Image Upload */}
         {user && (
-          <ImagePickerComponent
-            onImageSelected={setImageUrl}
-            currentImageUrl={imageUrl}
-            userId={user.id}
-            eventTitle={title}
-          />
+          <View style={styles.inputContainer}>
+            <ThemedText style={styles.label}>Event Image *</ThemedText>
+            <ImagePickerComponent
+              onImageSelected={setImageUrl}
+              currentImageUrl={imageUrl}
+              userId={user.id}
+              eventTitle={title}
+              allowRemove={false}
+            />
+          </View>
         )}
 
         {/* City Selection */}
@@ -584,7 +609,11 @@ export default function CreateEventForm({ onClose, onEventCreated }: CreateEvent
             >
               <IconSymbol name="calendar" size={18} color={Colors[colorScheme ?? 'light'].text} />
               <ThemedText style={styles.dateButtonTextSmall}>
-                {eventDate.toLocaleDateString()}
+                {eventDate ? new Date(eventDate).toLocaleDateString('en-US', { 
+                  year: 'numeric', 
+                  month: 'short', 
+                  day: 'numeric' 
+                }) : 'Select Date'}
               </ThemedText>
             </TouchableOpacity>
             
@@ -603,7 +632,11 @@ export default function CreateEventForm({ onClose, onEventCreated }: CreateEvent
             >
               <IconSymbol name="clock" size={18} color={Colors[colorScheme ?? 'light'].text} />
               <ThemedText style={styles.dateButtonTextSmall}>
-                {eventDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                {eventDate ? new Date(eventDate).toLocaleTimeString('en-US', { 
+                  hour: '2-digit', 
+                  minute: '2-digit',
+                  hour12: true 
+                }) : 'Select Time'}
               </ThemedText>
             </TouchableOpacity>
           </View>
@@ -704,14 +737,58 @@ export default function CreateEventForm({ onClose, onEventCreated }: CreateEvent
       </ScrollView>
 
       {/* Date Picker */}
-      {showDatePicker && (
+      {showDatePicker && Platform.OS === 'ios' && (
+        <Modal
+          transparent={true}
+          animationType="fade"
+          visible={showDatePicker}
+          onRequestClose={() => setShowDatePicker(false)}
+        >
+          <Pressable 
+            style={styles.modalOverlay}
+            onPress={() => {
+              setShowDatePicker(false);
+              setDatePickerMode('date'); // Reset for next time
+            }}
+          >
+            <Pressable 
+              style={[
+                styles.pickerContainer,
+                { backgroundColor: Colors[colorScheme ?? 'light'].background }
+              ]} 
+              onPress={(e) => e.stopPropagation()}
+            >
+              <DateTimePicker
+                testID="dateTimePicker"
+                value={eventDate}
+                mode={datePickerMode}
+                is24Hour={true}
+                display="spinner"
+                onChange={onDateChange}
+                themeVariant={colorScheme ?? 'light'}
+                textColor={Colors[colorScheme ?? 'light'].text}
+                accentColor={Colors[colorScheme ?? 'light'].tint}
+                style={{
+                  backgroundColor: Colors[colorScheme ?? 'light'].background,
+                }}
+              />
+            </Pressable>
+          </Pressable>
+        </Modal>
+      )}
+      
+      {/* Android Date Picker - uses default system picker */}
+      {showDatePicker && Platform.OS === 'android' && (
         <DateTimePicker
           testID="dateTimePicker"
           value={eventDate}
           mode={datePickerMode}
           is24Hour={true}
-          display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+          display="default"
           onChange={onDateChange}
+          themeVariant={colorScheme ?? 'light'}
+          textColor={Colors[colorScheme ?? 'light'].text}
+          accentColor={Colors[colorScheme ?? 'light'].tint}
         />
       )}
       
@@ -907,5 +984,24 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     marginBottom: 8,
     color: '#666',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  pickerContainer: {
+    borderRadius: 12,
+    padding: 20,
+    margin: 20,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    elevation: 5,
   },
 });
