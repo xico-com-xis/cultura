@@ -4,22 +4,9 @@ import { Image, StyleSheet, TouchableOpacity, View } from 'react-native';
 
 import { ThemedText } from '@/components/ThemedText';
 import { Colors } from '@/constants/Colors';
-import { Event, EventType } from '@/context/EventsContext';
+import { eventTypeIcons } from '@/constants/EventTypes';
+import { Event } from '@/context/EventsContext';
 import { useColorScheme } from '@/hooks/useColorScheme';
-
-// Icon mapping for different event types
-const eventTypeIcons: Record<EventType, string> = {
-  music: '🎵',
-  art: '🎨',
-  theater: '🎭',
-  dance: '💃',
-  workshop: '🛠️',
-  festival: '🎪',
-  exhibition: '🖼️',
-  film: '🎬',
-  literature: '📚',
-  other: '🔖'
-};
 
 type EventCardProps = {
   event: Event;
@@ -81,8 +68,6 @@ export default function EventCard({ event }: EventCardProps) {
             ? formatDate(event.schedule[0].date)
             : 'Date TBA'}
         </ThemedText>
-        
-        <ThemedText style={styles.location} numberOfLines={1}>{event.location}</ThemedText>
       </View>
     </TouchableOpacity>
   );
@@ -132,9 +117,5 @@ const styles = StyleSheet.create({
   date: {
     fontSize: 14,
     marginBottom: 4,
-  },
-  location: {
-    fontSize: 14,
-    opacity: 0.8,
   }
 });

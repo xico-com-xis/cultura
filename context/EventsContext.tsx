@@ -677,8 +677,61 @@ export const EventProvider: React.FC<{children: React.ReactNode}> = ({ children 
     selectedCountry: 'Portugal', // Default country
   });
 
-  // Transform database response to Event type
-  const transformEventData = (dbEvent: any): Event => {
+  // Function to fetch multiple user display names by user IDs (batch operation)
+  const fetchUserDisplayNames = async (userIds: string[]): Promise<Record<string, string>> => {
+    try {
+      const uniqueUserIds = [...new Set(userIds)]; // Remove duplicates
+      const userNameMap: Record<string, string> = {};
+      
+      // For now, let's try to get basic info and fall back to a meaningful default
+      // In a real implementation, you would query your user profiles table
+      
+      // Try to get from profiles table first (common Supabase pattern)
+      try {
+        const { data: profilesData, error: profilesError } = await supabase
+          .from('profiles')
+          .select('id, display_name, full_name')
+          .in('id', uniqueUserIds);
+          
+        if (!profilesError && profilesData && profilesData.length > 0) {
+          profilesData.forEach(profile => {
+            userNameMap[profile.id] = profile.display_name || profile.full_name || 'Event Organizer';
+          });
+        }
+      } catch (error) {
+        console.log('Profiles table not available:', error);
+      }
+      
+      // Fill in any missing users with fallback
+      uniqueUserIds.forEach(userId => {
+        if (!userNameMap[userId]) {
+          // Create a meaningful fallback based on user ID
+          const shortId = userId.substring(0, 8);
+          userNameMap[userId] = `User ${shortId}`;
+        }
+      });
+      
+      return userNameMap;
+             
+    } catch (error) {
+      console.log('Error fetching user display names:', error);
+      const fallbackMap: Record<string, string> = {};
+      userIds.forEach(userId => {
+        const shortId = userId.substring(0, 8);
+        fallbackMap[userId] = `User ${shortId}`;
+      });
+      return fallbackMap;
+    }
+  };
+
+  // Function to fetch user display name by user ID
+  const fetchUserDisplayName = async (userId: string): Promise<string> => {
+    const userNameMap = await fetchUserDisplayNames([userId]);
+    return userNameMap[userId] || 'Event Organizer';
+  };
+
+  // Transform database response to Event type (synchronous version with organizer name)
+  const transformEventDataSync = (dbEvent: any, organizerName: string): Event => {
     return {
       id: dbEvent.id,
       title: dbEvent.title,
@@ -693,7 +746,7 @@ export const EventProvider: React.FC<{children: React.ReactNode}> = ({ children 
       description: dbEvent.description || '',
       organizer: {
         id: dbEvent.created_by || 'unknown',
-        name: 'Event Organizer', // We don't have organizer name in the schema
+        name: organizerName,
         profileImage: undefined
       },
       professionals: [], // We don't store this in the basic schema
@@ -713,6 +766,13 @@ export const EventProvider: React.FC<{children: React.ReactNode}> = ({ children 
       } : undefined,
       image: dbEvent.image_url || undefined
     };
+  };
+
+  // Transform database response to Event type (async version)
+  const transformEventData = async (dbEvent: any): Promise<Event> => {
+    // Fetch organizer display name
+    const organizerName = await fetchUserDisplayName(dbEvent.created_by || 'unknown');
+    return transformEventDataSync(dbEvent, organizerName);
   };
 
   // Smart merge function to combine local and database events
@@ -748,37 +808,40 @@ export const EventProvider: React.FC<{children: React.ReactNode}> = ({ children 
         return;
       }
 
-      // Try the RPC function
-      const { data, error } = await supabase.rpc('get_events_with_details');
+      console.log('Skipping RPC function, using manual query...');
       
-      if (error) {
-        console.error('RPC function error:', error);
-        
-        // Fallback to basic query with manual joins
-        const { data: eventsData, error: eventsError } = await supabase
-          .from('events')
-          .select(`
-            *,
-            event_schedules(*),
-            event_tickets(*),
-            event_accessibility(*)
-          `);
-        
-        if (eventsError) {
-          console.error('Manual query also failed:', eventsError);
-          setEvents(SAMPLE_EVENTS);
-          return;
-        }
-
-        if (eventsData) {
-          const transformedEvents = eventsData.map(transformEventData);
-          setEvents(currentEvents => mergeEventsSmartly(currentEvents, transformedEvents));
-        }
+      // Use manual query with proper joins
+      const { data: eventsData, error: eventsError } = await supabase
+        .from('events')
+        .select(`
+          *,
+          event_schedules(*),
+          event_tickets(*),
+          event_accessibility(*)
+        `);
+      
+      console.log('Manual query result:', { eventsData, eventsError });
+      
+      if (eventsError) {
+        console.error('Manual query failed:', eventsError);
+        setEvents(SAMPLE_EVENTS);
         return;
       }
 
-      if (data) {
-        const transformedEvents = data.map(transformEventData);
+      if (eventsData) {
+        console.log('Sample raw event data:', eventsData[0]);
+        
+        // Extract all unique user IDs for batch fetching
+        const userIds = [...new Set(eventsData.map(event => event.created_by).filter(Boolean))];
+        const userNameMap = await fetchUserDisplayNames(userIds);
+        
+        // Transform events with the user name map
+        const transformedEvents = eventsData.map(dbEvent => {
+          const organizerName = userNameMap[dbEvent.created_by] || 'Event Organizer';
+          return transformEventDataSync(dbEvent, organizerName);
+        });
+        
+        console.log('Sample transformed event:', transformedEvents[0]);
         setEvents(currentEvents => mergeEventsSmartly(currentEvents, transformedEvents));
       } else {
         setEvents(SAMPLE_EVENTS);
@@ -996,9 +1059,15 @@ export const EventProvider: React.FC<{children: React.ReactNode}> = ({ children 
           }
 
           if (data && data.length > 0) {
-            const transformedEvents: Event[] = data
-              .map(transformEventData)
-              .filter(Boolean) as Event[];
+            // Extract all unique user IDs for batch fetching
+            const userIds = [...new Set(data.map((event: any) => event.created_by).filter(Boolean))] as string[];
+            const userNameMap = await fetchUserDisplayNames(userIds);
+            
+            // Transform events with the user name map
+            const transformedEvents: Event[] = data.map((dbEvent: any) => {
+              const organizerName = userNameMap[dbEvent.created_by] || 'Event Organizer';
+              return transformEventDataSync(dbEvent, organizerName);
+            }).filter(Boolean);
             
             setEvents(currentEvents => mergeEventsSmartly(currentEvents, transformedEvents));
           }
@@ -1028,14 +1097,30 @@ export const EventProvider: React.FC<{children: React.ReactNode}> = ({ children 
 
   // Calculate filtered events (memoized to prevent unnecessary recalculations)
   const filteredEvents = useMemo(() => {
-    // Sort events by earliest date first
-    const sortedEvents = [...events].sort((a, b) => {
+    const now = new Date();
+    
+    // First filter out past events (events where all schedule dates are in the past)
+    const futureEvents = events.filter(event => {
+      if (!event.schedule || event.schedule.length === 0) {
+        // If no schedule, include the event (could be TBA)
+        return true;
+      }
+      
+      // Check if any scheduled date is in the future
+      return event.schedule.some(schedule => {
+        const eventDate = new Date(schedule.date);
+        return eventDate > now;
+      });
+    });
+    
+    // Sort events by earliest date first (future events only)
+    const sortedEvents = [...futureEvents].sort((a, b) => {
       const aDate = a.schedule && a.schedule.length > 0 ? new Date(a.schedule[0].date) : new Date();
       const bDate = b.schedule && b.schedule.length > 0 ? new Date(b.schedule[0].date) : new Date();
       return aDate.getTime() - bDate.getTime();
     });
     
-    // Filter events
+    // Filter events by other criteria
     return sortedEvents.filter(event => {
       // Type filter: event passes if 'all' is selected or its type is in selectedTypes
       const passesTypeFilter = filters.selectedTypes.includes('all') || 

@@ -6,6 +6,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
 import { IconSymbol } from '@/components/ui/IconSymbol';
+import { eventTypeIcons } from '@/constants/EventTypes';
 import { AccessibilityFeature, useEvents } from '@/context/EventsContext';
 
 const accessibilityIcons: Record<AccessibilityFeature, string> = {
@@ -48,6 +49,30 @@ export default function EventDetailScreen() {
       return dateStr;
     }
   };
+
+  const navigateToMap = () => {
+    if (event.coordinates) {
+      console.log('Event Detail - Navigating to map with coordinates:', event.coordinates);
+      router.push({
+        pathname: '/(tabs)/map',
+        params: { 
+          latitude: event.coordinates.latitude.toString(),
+          longitude: event.coordinates.longitude.toString(),
+          eventId: event.id,
+          eventTitle: event.title
+        }
+      });
+    } else {
+      console.log('Event Detail - No coordinates available for event:', event.id);
+    }
+  };
+
+  const getLocationDisplay = () => {
+    if (event.location && event.location.trim()) {
+      return `${event.location.trim()}, ${event.city}`;
+    }
+    return event.city;
+  };
   
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -74,7 +99,9 @@ export default function EventDetailScreen() {
         <ThemedView style={styles.content}>
           <ThemedText type="title" style={styles.title}>{event.title}</ThemedText>
           
-          <ThemedText style={styles.type}>{event.type}</ThemedText>
+          <ThemedText style={styles.type}>
+            {eventTypeIcons[event.type]} {event.type}
+          </ThemedText>
           
           <ThemedView style={styles.section}>
             <IconSymbol name="calendar" size={20} color="#808080" />
@@ -88,7 +115,16 @@ export default function EventDetailScreen() {
           
           <ThemedView style={styles.section}>
             <IconSymbol name="mappin" size={20} color="#808080" />
-            <ThemedText style={styles.location}>{event.location}</ThemedText>
+            <TouchableOpacity onPress={navigateToMap} disabled={!event.coordinates}>
+              <ThemedText 
+                style={[
+                  styles.location, 
+                  event.coordinates && styles.clickableLocation
+                ]}
+              >
+                {getLocationDisplay()}
+              </ThemedText>
+            </TouchableOpacity>
           </ThemedView>
           
           <ThemedView style={styles.section}>
@@ -205,6 +241,10 @@ const styles = StyleSheet.create({
   },
   location: {
     marginTop: 4,
+  },
+  clickableLocation: {
+    color: '#007AFF', // iOS blue color to indicate it's clickable
+    textDecorationLine: 'underline',
   },
   description: {
     lineHeight: 22,

@@ -4,8 +4,9 @@ import { Event, useEvents } from '@/context/EventsContext';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { getCityDefaultCoordinates } from '@/utils/geocoding';
 import * as Location from 'expo-location';
+import { useLocalSearchParams } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import React, { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import MapView, { Callout, Marker, Polygon, Polyline, PROVIDER_GOOGLE, Region } from 'react-native-maps';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -14,6 +15,7 @@ export default function MapScreen() {
   const colorScheme = useColorScheme();
   const insets = useSafeAreaInsets();
   const mapRef = useRef<MapView>(null);
+  const params = useLocalSearchParams();
   const [location, setLocation] = useState<Location.LocationObject | null>(null);
   const { 
     events, 
@@ -24,10 +26,16 @@ export default function MapScreen() {
     setDrawingMode,
     setPolygonCoords,
     setSelectedCity,
-    setShouldNavigateToMap,
-    hasActiveTypeFilters 
+    setShouldNavigateToMap
   } = useEvents();
   const [showEvents, setShowEvents] = useState(true);
+  
+  // Check if any filters are currently active
+  const hasActiveFilters = () => {
+    return !(filters.selectedTypes.length === 1 && filters.selectedTypes.includes('all')) ||
+           filters.selectedCity !== 'all' ||
+           filters.mapFilterEnabled;
+  };
   
   //Request location permissions and get current location
   useEffect(() => {
@@ -52,6 +60,34 @@ export default function MapScreen() {
       }
     })();
   }, []);
+
+  // Handle URL parameters for navigation to specific event coordinates
+  useEffect(() => {
+    if (params.latitude && params.longitude) {
+      const lat = parseFloat(params.latitude as string);
+      const lng = parseFloat(params.longitude as string);
+      
+      if (!isNaN(lat) && !isNaN(lng)) {
+        const newRegion = {
+          latitude: lat,
+          longitude: lng,
+          latitudeDelta: 0.01, // Zoom in closer for specific event
+          longitudeDelta: 0.01,
+        };
+        
+        setRegion(newRegion);
+        
+        // Animate to the event location after a short delay to ensure map is ready
+        setTimeout(() => {
+          if (mapRef.current) {
+            mapRef.current.animateToRegion(newRegion, 1000);
+          }
+        }, 500);
+        
+        console.log('Navigated to event coordinates:', { lat, lng, eventTitle: params.eventTitle });
+      }
+    }
+  }, [params.latitude, params.longitude, params.eventId, params.eventTitle]);
 
   // New state for map region
   const [region, setRegion] = useState<Region>({
@@ -255,7 +291,7 @@ export default function MapScreen() {
           pitchEnabled={!filters.drawingMode}
         >
           {/* Event markers */}
-          {showEvents && (hasActiveTypeFilters ? filteredEvents : events)
+          {showEvents && filteredEvents
             .map(event => {
               // Use coordinates from event or get default coordinates for the city
               let coordinates = event.coordinates;
@@ -377,16 +413,16 @@ export default function MapScreen() {
         style={[
           styles.filterToggleButton, 
           { 
-            backgroundColor: hasActiveTypeFilters ? Colors[colorScheme ?? 'light'].tint : '#808080',
-            opacity: hasActiveTypeFilters ? 1 : 0.6
+            backgroundColor: hasActiveFilters() ? Colors[colorScheme ?? 'light'].tint : '#808080',
+            opacity: hasActiveFilters() ? 1 : 0.6
           }
         ]}
-        onPress={hasActiveTypeFilters ? toggleOffEventsFilters : undefined}
-        disabled={!hasActiveTypeFilters}
+        onPress={hasActiveFilters() ? toggleOffEventsFilters : undefined}
+        disabled={!hasActiveFilters()}
       >
         <IconSymbol size={20} name="line.3.horizontal.decrease" color="#fff" />
         <Text style={styles.eventToggleText}>
-          {hasActiveTypeFilters ? 'Filters On' : 'All Events'}
+          {hasActiveFilters() ? 'Filters On' : 'All Events'}
         </Text>
       </TouchableOpacity>
 

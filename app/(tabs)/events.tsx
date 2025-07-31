@@ -8,24 +8,10 @@ import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { Colors } from '@/constants/Colors';
+import { eventTypeOptions } from '@/constants/EventTypes';
 import { useAuth } from '@/context/AuthContext';
 import { EventType, useEvents } from '@/context/EventsContext';
 import { useColorScheme } from '@/hooks/useColorScheme';
-
-// Event type options with emoji icons
-const eventTypeOptions: Array<{ type: EventType | 'all'; label: string; icon: string }> = [
-  { type: 'all', label: 'All', icon: '🗓️' },
-  { type: 'music', label: 'Music', icon: '🎵' },
-  { type: 'art', label: 'Art', icon: '🎨' },
-  { type: 'theater', label: 'Theater', icon: '🎭' },
-  { type: 'dance', label: 'Dance', icon: '💃' },
-  { type: 'workshop', label: 'Workshop', icon: '🛠️' },
-  { type: 'festival', label: 'Festival', icon: '🎪' },
-  { type: 'exhibition', label: 'Exhibition', icon: '🖼️' },
-  { type: 'film', label: 'Film', icon: '🎬' },
-  { type: 'literature', label: 'Literature', icon: '📚' },
-  { type: 'other', label: 'Other', icon: '🔖' }
-];
 
 export default function EventsScreen() {
   // Use filtered events and filter methods from context
