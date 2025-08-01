@@ -1,14 +1,15 @@
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { Colors } from '@/constants/Colors';
+import { eventTypeIcons } from '@/constants/EventTypes';
 import { Event, useEvents } from '@/context/EventsContext';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { getCityDefaultCoordinates } from '@/utils/geocoding';
 import * as Location from 'expo-location';
-import { useLocalSearchParams } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useRef, useState } from 'react';
-import { Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import MapView, { Callout, Marker, Polygon, Polyline, PROVIDER_GOOGLE, Region } from 'react-native-maps';
+import { Animated, Image, Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import MapView, { Marker, Polygon, Polyline, PROVIDER_GOOGLE, Region } from 'react-native-maps';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export default function MapScreen() {
@@ -29,6 +30,9 @@ export default function MapScreen() {
     setShouldNavigateToMap
   } = useEvents();
   const [showEvents, setShowEvents] = useState(true);
+  const [selectedEvent, setSelectedEvent] = useState<Event | null>(null);
+  const [showEventPreview, setShowEventPreview] = useState(false);
+  const previewAnimation = useRef(new Animated.Value(0)).current;
   
   // Check if any filters are currently active
   const hasActiveFilters = () => {
@@ -102,10 +106,60 @@ export default function MapScreen() {
   // Handle individual event press
   const handleEventPress = (event: Event) => {
     console.log('Event pressed:', event.title);
-    // You can add more functionality here, like:
-    // - Navigate to event details page
-    // - Show more information in a modal
-    // - Highlight the event on the map
+    setSelectedEvent(event);
+    showEventPreviewModal();
+  };
+
+  // Show event preview with simple slide animation
+  const showEventPreviewModal = () => {
+    setShowEventPreview(true);
+    Animated.timing(previewAnimation, {
+      toValue: 1,
+      duration: 300,
+      useNativeDriver: true,
+    }).start();
+  };
+
+  // Hide event preview with simple slide animation
+  const hideEventPreviewModal = () => {
+    Animated.timing(previewAnimation, {
+      toValue: 0,
+      duration: 250,
+      useNativeDriver: true,
+    }).start(() => {
+      setShowEventPreview(false);
+      setSelectedEvent(null);
+    });
+  };
+
+  // Navigate to event details page
+  const navigateToEventDetails = () => {
+    if (selectedEvent) {
+      hideEventPreviewModal();
+      // Small delay to let animation finish before navigation
+      setTimeout(() => {
+        router.push({
+          pathname: '/event/[id]',
+          params: { id: selectedEvent.id }
+        });
+      }, 150);
+    }
+  };
+
+  // Format date for preview
+  const formatEventDate = (dateStr: string) => {
+    try {
+      const date = new Date(dateStr);
+      return date.toLocaleDateString('en-US', { 
+        weekday: 'short', 
+        month: 'short', 
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+      });
+    } catch (error) {
+      return dateStr;
+    }
   };
 
   // Handle region change
@@ -131,20 +185,6 @@ export default function MapScreen() {
     setMapFilterEnabled(false);
     setPolygonCoords([]);
   };
-
-  const handleIndividualEventPress = (event: Event) => {
-    console.log('Individual event pressed:', event);
-    console.log('Individual event pressed:', event.title);
-    console.log('Individual event pressed:', event.description);
-    console.log('Individual event pressed:', event.location);
-    
-    // You can add more functionality here, like:
-    // - Navigate to event details page
-    // - Show more information in a modal
-    // - Highlight the event on the map
-  };
-
-
 
 
   // Center map on current location
@@ -306,21 +346,7 @@ export default function MapScreen() {
                   coordinate={coordinates}
                   pinColor={Colors[colorScheme ?? 'light'].tint}
                   onPress={() => handleEventPress(event)}
-                >
-                  <Callout tooltip>
-                    <View style={styles.calloutView}>
-                      <Text style={styles.calloutTitle}>
-                        {event.title || 'Event'}
-                      </Text>
-                      <Text style={styles.calloutDetails}>
-                        {event.location || 'Location not specified'}
-                      </Text>
-                      <Text style={styles.calloutDescription}>
-                        {event.description || 'No description available'}
-                      </Text>
-                    </View>
-                  </Callout>
-                </Marker>
+                />
               ) : null;
             })
             .filter(Boolean) // Remove null entries
@@ -426,6 +452,105 @@ export default function MapScreen() {
         </Text>
       </TouchableOpacity>
 
+      {/* Event Preview Modal */}
+      {showEventPreview && selectedEvent && (
+        <Animated.View
+          style={[
+            styles.eventPreviewContainer,
+            {
+              transform: [
+                {
+                  translateY: previewAnimation.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [-400, 0],
+                  }),
+                },
+              ],
+              opacity: previewAnimation,
+            },
+          ]}
+        >
+          {/* Backdrop - clicking closes modal */}
+          <TouchableOpacity 
+            style={styles.backdrop}
+            onPress={hideEventPreviewModal}
+            activeOpacity={1}
+          />
+          
+          <View style={[styles.eventPreview, { marginTop: insets.top + 10 }]}>
+            <TouchableOpacity 
+              style={styles.eventPreviewContent}
+              onPress={navigateToEventDetails}
+              activeOpacity={0.9}
+            >
+              {/* Close button */}
+              <TouchableOpacity 
+                style={styles.closeButton}
+                onPress={hideEventPreviewModal}
+              >
+                <IconSymbol name="xmark" size={20} color="#666" />
+              </TouchableOpacity>
+
+              {/* Event Image */}
+              {selectedEvent.image ? (
+                <Image 
+                  source={{ uri: selectedEvent.image }} 
+                  style={styles.eventPreviewImage}
+                  resizeMode="cover"
+                />
+              ) : (
+                <View style={styles.eventPreviewImagePlaceholder}>
+                  <IconSymbol name="photo" size={40} color="#999" />
+                </View>
+              )}
+
+              {/* Event Details */}
+              <View style={styles.eventPreviewContentInner}>
+                <View style={styles.eventPreviewHeader}>
+                  <Text style={styles.eventPreviewType}>
+                    {eventTypeIcons[selectedEvent.type]} {selectedEvent.type}
+                  </Text>
+                  <Text style={styles.eventPreviewTitle} numberOfLines={2}>
+                    {selectedEvent.title}
+                  </Text>
+                </View>
+
+                <View style={styles.eventPreviewDetails}>
+                  <View style={styles.eventPreviewRow}>
+                    <IconSymbol name="calendar" size={16} color="#666" />
+                    <Text style={styles.eventPreviewText}>
+                      {selectedEvent.schedule.length > 0 
+                        ? formatEventDate(selectedEvent.schedule[0].date)
+                        : 'Date TBA'
+                      }
+                    </Text>
+                  </View>
+
+                  <View style={styles.eventPreviewRow}>
+                    <IconSymbol name="mappin" size={16} color="#666" />
+                    <Text style={styles.eventPreviewText} numberOfLines={1}>
+                      {selectedEvent.location 
+                        ? `${selectedEvent.location}, ${selectedEvent.city}`
+                        : selectedEvent.city
+                      }
+                    </Text>
+                  </View>
+
+                  <View style={styles.eventPreviewRow}>
+                    <IconSymbol name="person" size={16} color="#666" />
+                    <Text style={styles.eventPreviewText}>
+                      {selectedEvent.organizer.name}
+                    </Text>
+                  </View>
+                </View>
+
+                <Text style={styles.tapToViewText}>Tap to view full details</Text>
+              </View>
+            </TouchableOpacity>
+          </View>
+        </Animated.View>
+      )}
+
     </View>
   );
 }
@@ -467,41 +592,6 @@ const styles = StyleSheet.create({
   buttonText: {
     color: '#ffffff',
     fontWeight: '600',
-  },
-  calloutView: {
-    backgroundColor: 'white',
-    borderRadius: 8,
-    padding: 12,
-    minWidth: 200,
-    width: 250,
-    maxWidth: 300,
-    borderColor: '#ccc',
-    borderWidth: 1,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 2,
-    elevation: 3,
-  },
-  calloutTitle: {
-    fontWeight: 'bold',
-    fontSize: 16,
-    marginBottom: 6,
-    flexWrap: 'wrap',
-  },
-  calloutDetails: {
-    fontSize: 13,
-    color: '#444',
-    marginBottom: 4,
-    flexWrap: 'wrap',
-  },
-  calloutDescription: {
-    marginTop: 4,
-    fontSize: 12,
-    color: '#666',
-    flexWrap: 'wrap',  
-    lineHeight: 18,
-    maxHeight: 72,     
   },
   eventToggleButton: {
     position: 'absolute',
@@ -557,5 +647,112 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     borderRadius: 20,
     gap: 6,
-  }
+  },
+  // Event Preview Styles
+  eventPreviewContainer: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: 1000,
+    justifyContent: 'flex-start',
+  },
+  backdrop: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'transparent',
+  },
+  eventPreview: {
+    marginHorizontal: 16,
+    height: '55%',
+    backgroundColor: 'white',
+    borderRadius: 20,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 4,
+    },
+    shadowOpacity: 0.3,
+    shadowRadius: 5,
+    elevation: 8,
+    overflow: 'hidden',
+  },
+  eventPreviewContent: {
+    flex: 1,
+  },
+  closeButton: {
+    position: 'absolute',
+    top: 12,
+    right: 12,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: 'rgba(255, 255, 255, 0.9)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 10,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.2,
+    shadowRadius: 3,
+    elevation: 3,
+  },
+  eventPreviewImage: {
+    width: '100%',
+    height: '60%',
+  },
+  eventPreviewImagePlaceholder: {
+    width: '100%',
+    height: '60%',
+    backgroundColor: '#f0f0f0',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  eventPreviewContentInner: {
+    flex: 1,
+    padding: 16,
+    justifyContent: 'space-between',
+  },
+  eventPreviewHeader: {
+    marginBottom: 12,
+  },
+  eventPreviewType: {
+    fontSize: 14,
+    color: '#666',
+    marginBottom: 4,
+    textTransform: 'capitalize',
+  },
+  eventPreviewTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#333',
+    lineHeight: 24,
+  },
+  eventPreviewDetails: {
+    gap: 8,
+  },
+  eventPreviewRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  eventPreviewText: {
+    fontSize: 14,
+    color: '#555',
+    flex: 1,
+  },
+  tapToViewText: {
+    fontSize: 12,
+    color: '#999',
+    textAlign: 'center',
+    marginTop: 8,
+    fontStyle: 'italic',
+  },
 });
