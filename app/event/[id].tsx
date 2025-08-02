@@ -1,7 +1,6 @@
 import { format } from 'date-fns';
 import { router, useLocalSearchParams } from 'expo-router';
 import { Image, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
@@ -67,6 +66,20 @@ export default function EventDetailScreen() {
     }
   };
 
+  const navigateToOrganizer = () => {
+    if (event.organizer.id) {
+      console.log('Event Detail - Navigating to organizer page:', event.organizer.id);
+      router.push({
+        pathname: '/organizer/[id]',
+        params: { 
+          id: event.organizer.id
+        }
+      });
+    } else {
+      console.log('Event Detail - No organizer ID available for event:', event.id);
+    }
+  };
+
   const getLocationDisplay = () => {
     if (event.location && event.location.trim()) {
       return `${event.location.trim()}, ${event.city}`;
@@ -75,8 +88,8 @@ export default function EventDetailScreen() {
   };
   
   return (
-    <SafeAreaView style={styles.safeArea}>
-      <ScrollView style={styles.container}>
+    <View style={styles.container}>
+      <ScrollView style={styles.scrollView}>
         <TouchableOpacity 
           style={styles.backButton}
           onPress={() => router.back()}
@@ -96,7 +109,7 @@ export default function EventDetailScreen() {
           </View>
         )}
         
-        <ThemedView style={styles.content}>
+        <View style={styles.content}>
           <ThemedText type="title" style={styles.title}>{event.title}</ThemedText>
           
           <ThemedText style={styles.type}>
@@ -134,7 +147,13 @@ export default function EventDetailScreen() {
           
           <ThemedView style={styles.section}>
             <ThemedText style={styles.sectionTitle}>Organizer</ThemedText>
-            <ThemedText style={styles.organizer}>{event.organizer.name}</ThemedText>
+            <TouchableOpacity onPress={navigateToOrganizer}>
+              <ThemedText 
+                style={[styles.organizer, styles.clickableOrganizer]}
+              >
+                {event.organizer.name}
+              </ThemedText>
+            </TouchableOpacity>
           </ThemedView>
           
           {event.professionals && event.professionals.length > 0 && (
@@ -175,22 +194,25 @@ export default function EventDetailScreen() {
               </TouchableOpacity>
             )}
           </ThemedView>
-        </ThemedView>
+        </View>
       </ScrollView>
-    </SafeAreaView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-  },
   container: {
     flex: 1,
+    paddingTop: 44, // Add padding for status bar (clock, battery, etc.)
+    backgroundColor: '#ffffff', // Ensure white background
+  },
+  scrollView: {
+    flex: 1,
+    backgroundColor: '#ffffff', // Ensure white background
   },
   backButton: {
     position: 'absolute',
-    top: 16,
+    top: 50, // Positioned relative to the padded container
     left: 16,
     zIndex: 10,
     width: 40,
@@ -217,6 +239,7 @@ const styles = StyleSheet.create({
   },
   content: {
     padding: 20,
+    backgroundColor: '#ffffff', // Ensure white background
   },
   title: {
     fontSize: 24,
@@ -250,6 +273,10 @@ const styles = StyleSheet.create({
     lineHeight: 22,
   },
   organizer: {},
+  clickableOrganizer: {
+    color: '#007AFF', // iOS blue color to indicate it's clickable
+    textDecorationLine: 'underline',
+  },
   professional: {
     marginBottom: 4,
   },

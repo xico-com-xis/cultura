@@ -51,6 +51,12 @@ export type Organizer = {
   id: string;
   name: string;
   profileImage?: string;
+  contact?: {
+    email?: string;
+    phone?: string;
+    website?: string;
+  };
+  allowContactSharing?: boolean;
 };
 
 // Define accessibility options
@@ -140,7 +146,13 @@ export const SAMPLE_EVENTS: Event[] = [
     organizer: {
       id: 'org1',
       name: 'Museu Nacional de Arte Antiga',
-      profileImage: 'https://example.com/caa.png'
+      profileImage: 'https://example.com/caa.png',
+      contact: {
+        email: 'info@museuarteantiga.pt',
+        phone: '+351 213 912 800',
+        website: 'www.museuarteantiga.pt'
+      },
+      allowContactSharing: true
     },
     professionals: ['Maria Santos (Curator)', 'João Silva (Artist)', 'Ana Martins (Artist)'],
     accessibility: ['wheelchair', 'hearing', 'parking'],
@@ -174,7 +186,12 @@ export const SAMPLE_EVENTS: Event[] = [
     organizer: {
       id: 'org2',
       name: 'SoundWave Productions',
-      profileImage: 'https://example.com/soundwave.png'
+      profileImage: 'https://example.com/soundwave.png',
+      contact: {
+        email: 'hello@soundwaveproductions.com',
+        website: 'www.soundwaveproductions.com'
+      },
+      allowContactSharing: true
     },
     professionals: ['DJ Martinez', 'The Rolling Notes', 'Electric Symphony', 'Sound engineer: Miguel Costa'],
     accessibility: ['wheelchair', 'restroom', 'seating'],
@@ -651,6 +668,44 @@ export const SAMPLE_EVENTS: Event[] = [
     coordinates: {
       latitude: 38.7139,
       longitude: -9.1394,
+    },
+    image: 'https://tripjive.com/wp-content/uploads/2024/01/Tainan-traditional-crafts-and-workshops-for-hands-on-learning-experiences.jpg'
+  },
+  // Past event by SoundWave Productions for testing
+  { 
+    id: '100', 
+    title: 'Summer Music Festival 2024',
+    type: 'festival',
+    schedule: [
+      { date: '2024-07-15T18:00:00', endDate: '2024-07-15T23:00:00' },
+      { date: '2024-07-16T18:00:00', endDate: '2024-07-16T23:00:00' }
+    ],
+    location: 'Praia de Carcavelos, Lisboa',
+    city: 'Lisboa',
+    country: 'Portugal',
+    description: 'Past summer festival with amazing performances. Featured local and international artists in a beachside setting.',
+    organizer: {
+      id: 'org2',
+      name: 'SoundWave Productions',
+      profileImage: 'https://example.com/soundwave.png',
+      contact: {
+        email: 'hello@soundwaveproductions.com',
+        website: 'www.soundwaveproductions.com'
+      },
+      allowContactSharing: true
+    },
+    professionals: ['DJ Beach', 'Sunset Vibes', 'Ocean Sounds Collective'],
+    accessibility: ['wheelchair', 'restroom', 'parking'],
+    ticketInfo: {
+      type: 'paid',
+      price: 35,
+      currency: 'EUR',
+      purchaseLink: 'https://tickets.soundwave.com/summer2024',
+      onSiteAvailable: false
+    },
+    coordinates: {
+      latitude: 38.6794,
+      longitude: -9.3533,
     },
     image: 'https://tripjive.com/wp-content/uploads/2024/01/Tainan-traditional-crafts-and-workshops-for-hands-on-learning-experiences.jpg'
   }
