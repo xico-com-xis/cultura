@@ -1,11 +1,12 @@
 import { format } from 'date-fns';
 import { router, useLocalSearchParams } from 'expo-router';
-import { Image, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
+import { Alert, Image, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
 
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { eventTypeIcons } from '@/constants/EventTypes';
+import { useAuth } from '@/context/AuthContext';
 import { AccessibilityFeature, useEvents } from '@/context/EventsContext';
 
 const accessibilityIcons: Record<AccessibilityFeature, string> = {
@@ -19,7 +20,15 @@ const accessibilityIcons: Record<AccessibilityFeature, string> = {
 
 export default function EventDetailScreen() {
   const { id } = useLocalSearchParams();
-  const { events, loading } = useEvents();
+  const { 
+    events, 
+    loading, 
+    favoriteEvent,
+    unfavoriteEvent,
+    isEventFavorited,
+    isGlobalNotificationEnabled
+  } = useEvents();
+  const { user } = useAuth();
   
   // Convert id to string to ensure proper comparison
   const eventId = String(id);
@@ -86,17 +95,55 @@ export default function EventDetailScreen() {
     }
     return event.city;
   };
+
+  const handleFavoriteToggle = async () => {
+    if (!user) {
+      Alert.alert('Sign In Required', 'Please sign in to favorite events');
+      return;
+    }
+
+    try {
+      if (isEventFavorited(eventId)) {
+        await unfavoriteEvent(eventId);
+      } else {
+        await favoriteEvent(eventId);
+      }
+    } catch (error) {
+      Alert.alert('Error', 'Failed to update favorite status');
+      console.error('Favorite toggle error:', error);
+    }
+  };
   
   return (
     <View style={styles.container}>
-      <ScrollView style={styles.scrollView}>
+      {/* Header */}
+      <ThemedView style={styles.header}>
         <TouchableOpacity 
-          style={styles.backButton}
+          style={styles.headerBackButton}
           onPress={() => router.back()}
         >
-          <IconSymbol name="chevron.left" size={24} color="#fff" />
+          <IconSymbol name="chevron.left" size={24} color="#007AFF" />
         </TouchableOpacity>
-        
+        <ThemedText style={styles.headerTitle}>Event Details</ThemedText>
+        {user && (
+          <TouchableOpacity 
+            style={[
+              styles.favoriteButton, 
+              isEventFavorited(eventId) && styles.favoriteButtonActive
+            ]}
+            onPress={handleFavoriteToggle}
+          >
+            <IconSymbol 
+              name={isEventFavorited(eventId) ? "heart.fill" : "heart"} 
+              size={20} 
+              color={isEventFavorited(eventId) ? "#fff" : "#4C8BF5"} 
+            />
+          </TouchableOpacity>
+        )}
+        {!user && <View style={styles.headerSpacer} />}
+      </ThemedView>
+
+      <ScrollView style={styles.scrollView}>        
         {event.image ? (
           <Image 
             source={{ uri: event.image }} 
@@ -203,12 +250,37 @@ export default function EventDetailScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    paddingTop: 44, // Add padding for status bar (clock, battery, etc.)
-    backgroundColor: '#ffffff', // Ensure white background
+    backgroundColor: '#ffffff',
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    paddingTop: 50,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e0e0e0',
+    backgroundColor: '#ffffff',
+  },
+  headerBackButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  headerTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    flex: 1,
+    textAlign: 'center',
+  },
+  headerSpacer: {
+    width: 40,
   },
   scrollView: {
     flex: 1,
-    backgroundColor: '#ffffff', // Ensure white background
+    backgroundColor: '#ffffff',
   },
   backButton: {
     position: 'absolute',
@@ -312,5 +384,19 @@ const styles = StyleSheet.create({
   buttonText: {
     color: 'white',
     fontWeight: '600',
+  },
+  favoriteButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'transparent',
+    borderWidth: 1,
+    borderColor: '#4C8BF5',
+  },
+  favoriteButtonActive: {
+    backgroundColor: '#4C8BF5',
+    borderColor: '#4C8BF5',
   },
 });

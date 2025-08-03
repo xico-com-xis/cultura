@@ -1,19 +1,21 @@
 import { isAfter, isBefore } from 'date-fns';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
-import { FlatList, StyleSheet, TouchableOpacity, View } from 'react-native';
+import { Alert, FlatList, StyleSheet, TouchableOpacity, View } from 'react-native';
 
 import EventCard from '@/components/EventCard';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
 import { IconSymbol } from '@/components/ui/IconSymbol';
+import { useAuth } from '@/context/AuthContext';
 import { Event, useEvents } from '@/context/EventsContext';
 
 type EventPeriod = 'future' | 'past';
 
 export default function OrganizerDetailScreen() {
   const { id } = useLocalSearchParams();
-  const { events, loading } = useEvents();
+  const { events, loading, favoritePerson, unfavoritePerson, isPersonFavorited } = useEvents();
+  const { user } = useAuth();
   const [selectedPeriod, setSelectedPeriod] = useState<EventPeriod>('future');
   
   // Convert id to string to ensure proper comparison
@@ -89,6 +91,25 @@ export default function OrganizerDetailScreen() {
     });
   };
 
+  const handleFavoriteToggle = async () => {
+    if (!user) {
+      Alert.alert('Sign In Required', 'Please sign in to favorite organizers');
+      return;
+    }
+
+    try {
+      const isFavorited = isPersonFavorited(organizerId);
+      if (isFavorited) {
+        await unfavoritePerson(organizerId);
+      } else {
+        await favoritePerson(organizerId);
+      }
+    } catch (error) {
+      Alert.alert('Error', 'Failed to update favorite status');
+      console.error('Favorite toggle error:', error);
+    }
+  };
+
   const renderEventItem = ({ item }: { item: Event }) => (
     <TouchableOpacity onPress={() => navigateToEvent(item)}>
       <EventCard event={item} />
@@ -107,7 +128,22 @@ export default function OrganizerDetailScreen() {
             <IconSymbol name="chevron.left" size={24} color="#007AFF" />
           </TouchableOpacity>
           <ThemedText style={styles.headerTitle}>Organizer</ThemedText>
-          <View style={styles.headerSpacer} />
+          {user && (
+            <TouchableOpacity 
+              style={[
+                styles.followButton, 
+                isPersonFavorited(organizerId) && styles.followButtonActive
+              ]}
+              onPress={handleFavoriteToggle}
+            >
+              <IconSymbol 
+                name={isPersonFavorited(organizerId) ? "heart.fill" : "heart"} 
+                size={20} 
+                color={isPersonFavorited(organizerId) ? "#fff" : "#4C8BF5"} 
+              />
+            </TouchableOpacity>
+          )}
+          {!user && <View style={styles.headerSpacer} />}
         </ThemedView>
         
         <ThemedView style={styles.content}>
@@ -262,6 +298,20 @@ const styles = StyleSheet.create({
   },
   headerSpacer: {
     width: 40, // Same width as back button for centering
+  },
+  followButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: '#4C8BF5',
+    backgroundColor: 'transparent',
+  },
+  followButtonActive: {
+    backgroundColor: '#4C8BF5',
+    borderColor: '#4C8BF5',
   },
   content: {
     flex: 1,

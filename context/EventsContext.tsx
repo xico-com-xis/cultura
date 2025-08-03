@@ -104,6 +104,16 @@ type FilterState = {
   selectedCountry: string;
 };
 
+// Define notification types
+export type NotificationType = 'reminders' | 'updates' | 'changes';
+
+// Define favorite state types
+type FavoriteState = {
+  favoriteEvents: Set<string>;
+  favoritePeople: Set<string>;
+  globalNotificationSettings: Set<NotificationType>;
+};
+
 // Create context
 type EventsContextType = {
   events: Event[];
@@ -124,6 +134,16 @@ type EventsContextType = {
   availableCountries: string[];
   loading: boolean;
   refreshEvents: () => Promise<void>;
+  // Favorite/notification functions
+  favoriteState: FavoriteState;
+  favoriteEvent: (eventId: string) => Promise<void>;
+  unfavoriteEvent: (eventId: string) => Promise<void>;
+  isEventFavorited: (eventId: string) => boolean;
+  favoritePerson: (personId: string) => Promise<void>;
+  unfavoritePerson: (personId: string) => Promise<void>;
+  isPersonFavorited: (personId: string) => boolean;
+  updateGlobalNotificationSetting: (notificationType: NotificationType, enabled: boolean) => Promise<void>;
+  isGlobalNotificationEnabled: (notificationType: NotificationType) => boolean;
 };
 
 
@@ -732,6 +752,13 @@ export const EventProvider: React.FC<{children: React.ReactNode}> = ({ children 
     selectedCountry: 'Portugal', // Default country
   });
 
+  // Favorite/notification state
+  const [favoriteState, setFavoriteState] = useState<FavoriteState>({
+    favoriteEvents: new Set<string>(),
+    favoritePeople: new Set<string>(),
+    globalNotificationSettings: new Set<NotificationType>(),
+  });
+
   // Function to fetch multiple user display names by user IDs (batch operation)
   const fetchUserDisplayNames = async (userIds: string[]): Promise<Record<string, string>> => {
     try {
@@ -972,6 +999,270 @@ export const EventProvider: React.FC<{children: React.ReactNode}> = ({ children 
 
   const setSelectedCountry = (country: string) => {
     setFilters(prev => ({ ...prev, selectedCountry: country, selectedCity: 'all' })); // Reset city when country changes
+  };
+
+  // Load favorite/notification data on user login
+  useEffect(() => {
+    if (user) {
+      loadFavoriteEvents();
+      loadFavoritePeople();
+      loadGlobalNotificationSettings();
+    } else {
+      // Clear data on logout
+      setFavoriteState({
+        favoriteEvents: new Set<string>(),
+        favoritePeople: new Set<string>(),
+        globalNotificationSettings: new Set<NotificationType>(),
+      });
+    }
+  }, [user]);
+
+  const loadFavoriteEvents = async () => {
+    if (!user) return;
+
+    try {
+      const { data, error } = await supabase
+        .from('favorite_events')
+        .select('event_id')
+        .eq('user_id', user.id);
+
+      if (error) {
+        console.error('Error loading favorite events:', error);
+        return;
+      }
+
+      const favoriteSet = new Set(data?.map(item => item.event_id) || []);
+      setFavoriteState(prev => ({
+        ...prev,
+        favoriteEvents: favoriteSet,
+      }));
+    } catch (error) {
+      console.error('Error loading favorite events:', error);
+    }
+  };
+
+  const loadFavoritePeople = async () => {
+    if (!user) return;
+
+    try {
+      const { data, error } = await supabase
+        .from('favorite_people')
+        .select('person_id')
+        .eq('user_id', user.id);
+
+      if (error) {
+        console.error('Error loading favorite people:', error);
+        return;
+      }
+
+      const favoriteSet = new Set(data?.map(item => item.person_id) || []);
+      setFavoriteState(prev => ({
+        ...prev,
+        favoritePeople: favoriteSet,
+      }));
+    } catch (error) {
+      console.error('Error loading favorite people:', error);
+    }
+  };
+
+  const loadGlobalNotificationSettings = async () => {
+    if (!user) return;
+
+    try {
+      const { data, error } = await supabase
+        .from('global_notification_settings')
+        .select('notification_type')
+        .eq('user_id', user.id)
+        .eq('enabled', true);
+
+      if (error) {
+        console.error('Error loading global notification settings:', error);
+        return;
+      }
+
+      const settingsSet = new Set(data?.map(item => item.notification_type as NotificationType) || []);
+      setFavoriteState(prev => ({
+        ...prev,
+        globalNotificationSettings: settingsSet,
+      }));
+    } catch (error) {
+      console.error('Error loading global notification settings:', error);
+    }
+  };
+
+  // Event favorite functions
+  const favoriteEvent = async (eventId: string) => {
+    if (!user) {
+      throw new Error('Must be logged in to favorite events');
+    }
+
+    try {
+      const { error } = await supabase
+        .from('favorite_events')
+        .insert({ user_id: user.id, event_id: eventId });
+
+      if (error) {
+        console.error('Error favoriting event:', error);
+        throw error;
+      }
+
+      setFavoriteState(prev => ({
+        ...prev,
+        favoriteEvents: new Set([...prev.favoriteEvents, eventId]),
+      }));
+    } catch (error) {
+      console.error('Error favoriting event:', error);
+      throw error;
+    }
+  };
+
+  const unfavoriteEvent = async (eventId: string) => {
+    if (!user) {
+      throw new Error('Must be logged in to unfavorite events');
+    }
+
+    try {
+      const { error } = await supabase
+        .from('favorite_events')
+        .delete()
+        .eq('user_id', user.id)
+        .eq('event_id', eventId);
+
+      if (error) {
+        console.error('Error unfavoriting event:', error);
+        throw error;
+      }
+
+      const newFavorites = new Set(favoriteState.favoriteEvents);
+      newFavorites.delete(eventId);
+      setFavoriteState(prev => ({
+        ...prev,
+        favoriteEvents: newFavorites,
+      }));
+    } catch (error) {
+      console.error('Error unfavoriting event:', error);
+      throw error;
+    }
+  };
+
+  const isEventFavorited = (eventId: string): boolean => {
+    return favoriteState.favoriteEvents.has(eventId);
+  };
+
+  // People favorite functions
+  const favoritePerson = async (personId: string) => {
+    if (!user) {
+      throw new Error('Must be logged in to favorite people');
+    }
+
+    try {
+      const { error } = await supabase
+        .from('favorite_people')
+        .insert({ user_id: user.id, person_id: personId });
+
+      if (error) {
+        console.error('Error favoriting person:', error);
+        throw error;
+      }
+
+      setFavoriteState(prev => ({
+        ...prev,
+        favoritePeople: new Set([...prev.favoritePeople, personId]),
+      }));
+    } catch (error) {
+      console.error('Error favoriting person:', error);
+      throw error;
+    }
+  };
+
+  const unfavoritePerson = async (personId: string) => {
+    if (!user) {
+      throw new Error('Must be logged in to unfavorite people');
+    }
+
+    try {
+      const { error } = await supabase
+        .from('favorite_people')
+        .delete()
+        .eq('user_id', user.id)
+        .eq('person_id', personId);
+
+      if (error) {
+        console.error('Error unfavoriting person:', error);
+        throw error;
+      }
+
+      const newFavorites = new Set(favoriteState.favoritePeople);
+      newFavorites.delete(personId);
+      setFavoriteState(prev => ({
+        ...prev,
+        favoritePeople: newFavorites,
+      }));
+    } catch (error) {
+      console.error('Error unfavoriting person:', error);
+      throw error;
+    }
+  };
+
+  const isPersonFavorited = (personId: string): boolean => {
+    return favoriteState.favoritePeople.has(personId);
+  };
+
+  // Global notification settings functions
+  const updateGlobalNotificationSetting = async (notificationType: NotificationType, enabled: boolean) => {
+    if (!user) {
+      throw new Error('Must be logged in to manage notification settings');
+    }
+
+    try {
+      if (enabled) {
+        // Enable notification
+        const { error } = await supabase
+          .from('global_notification_settings')
+          .upsert({
+            user_id: user.id,
+            notification_type: notificationType,
+            enabled: true,
+            updated_at: new Date().toISOString(),
+          });
+
+        if (error) {
+          console.error('Error enabling global notification:', error);
+          throw error;
+        }
+
+        setFavoriteState(prev => ({
+          ...prev,
+          globalNotificationSettings: new Set([...prev.globalNotificationSettings, notificationType]),
+        }));
+      } else {
+        // Disable notification
+        const { error } = await supabase
+          .from('global_notification_settings')
+          .delete()
+          .eq('user_id', user.id)
+          .eq('notification_type', notificationType);
+
+        if (error) {
+          console.error('Error disabling global notification:', error);
+          throw error;
+        }
+
+        const newSettings = new Set(favoriteState.globalNotificationSettings);
+        newSettings.delete(notificationType);
+        setFavoriteState(prev => ({
+          ...prev,
+          globalNotificationSettings: newSettings,
+        }));
+      }
+    } catch (error) {
+      console.error('Error updating global notification setting:', error);
+      throw error;
+    }
+  };
+
+  const isGlobalNotificationEnabled = (notificationType: NotificationType): boolean => {
+    return favoriteState.globalNotificationSettings.has(notificationType);
   };
 
   // Add a new event to Supabase and update local state
@@ -1227,7 +1518,16 @@ export const EventProvider: React.FC<{children: React.ReactNode}> = ({ children 
       availableCities,
       availableCountries,
       loading,
-      refreshEvents
+      refreshEvents,
+      favoriteState,
+      favoriteEvent,
+      unfavoriteEvent,
+      isEventFavorited,
+      favoritePerson,
+      unfavoritePerson,
+      isPersonFavorited,
+      updateGlobalNotificationSetting,
+      isGlobalNotificationEnabled
     }}>
       {children}
     </EventsContext.Provider>

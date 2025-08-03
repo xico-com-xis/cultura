@@ -1,3 +1,4 @@
+import { router } from 'expo-router';
 import { useState } from 'react';
 import { ActivityIndicator, Alert, KeyboardAvoidingView, Modal, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 
@@ -284,6 +285,37 @@ export default function ProfileScreen() {
             </TouchableOpacity>
           </ThemedView>
           
+          {/* Notifications & Favorites Section */}
+          <ThemedView style={styles.section}>
+            <ThemedText type="defaultSemiBold" style={styles.sectionTitle}>Preferences</ThemedText>
+            
+            <TouchableOpacity 
+              style={styles.menuItem}
+              onPress={() => router.push('/notifications-favorites')}
+            >
+              <View style={styles.menuItemContent}>
+                <View style={styles.menuItemLeft}>
+                  <IconSymbol 
+                    name="heart.fill" 
+                    size={24} 
+                    color={Colors[colorScheme ?? 'light'].tint} 
+                  />
+                  <View style={styles.menuItemText}>
+                    <ThemedText style={styles.menuItemTitle}>Notifications & Favorites</ThemedText>
+                    <ThemedText style={styles.menuItemSubtitle}>
+                      Manage followed organizers and event notifications
+                    </ThemedText>
+                  </View>
+                </View>
+                <IconSymbol 
+                  name="chevron.right" 
+                  size={20} 
+                  color={Colors[colorScheme ?? 'light'].text} 
+                />
+              </View>
+            </TouchableOpacity>
+          </ThemedView>
+          
           <ThemedView style={styles.section}>
             <ThemedText type="defaultSemiBold">My Events</ThemedText>
             <ThemedText>You haven't subscribed to any events yet.</ThemedText>
@@ -560,5 +592,36 @@ const styles = StyleSheet.create({
   selectedCountryText: {
     color: '#fff',
     fontWeight: '600',
+  },
+  menuItem: {
+    paddingVertical: 16,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+    backgroundColor: 'rgba(0, 0, 0, 0.02)',
+    marginBottom: 8,
+  },
+  menuItemContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  menuItemLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  menuItemText: {
+    marginLeft: 16,
+    flex: 1,
+  },
+  menuItemTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    marginBottom: 2,
+  },
+  menuItemSubtitle: {
+    fontSize: 14,
+    color: '#666',
+    lineHeight: 18,
   },
 });
