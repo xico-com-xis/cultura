@@ -3,24 +3,25 @@ import { IconSymbol } from '@/components/ui/IconSymbol';
 import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { ImageUploadResult, pickImage, takePhoto, uploadImageToSupabase } from '@/utils/imageUpload';
-import React, { useState } from 'react';
+import { useState } from 'react';
 import {
-    ActionSheetIOS,
-    ActivityIndicator,
-    Alert,
-    Image,
-    Platform,
-    StyleSheet,
-    TouchableOpacity,
-    View,
+  ActionSheetIOS,
+  ActivityIndicator,
+  Alert,
+  Image,
+  Platform,
+  StyleSheet,
+  TouchableOpacity,
+  View,
 } from 'react-native';
 
 interface ImagePickerComponentProps {
-  onImageSelected: (imageUrl: string) => void;
-  currentImageUrl?: string;
+  onImageSelected: (imageUri: string) => void; // Now expects local URI instead of uploaded URL
+  currentImageUrl?: string; // Can be local URI or uploaded URL
   userId: string;
   eventTitle: string;
   allowRemove?: boolean;
+  skipUpload?: boolean; // New prop to skip immediate upload
 }
 
 export default function ImagePickerComponent({
@@ -29,6 +30,7 @@ export default function ImagePickerComponent({
   userId,
   eventTitle,
   allowRemove = true,
+  skipUpload = false, // Default to false for backward compatibility
 }: ImagePickerComponentProps) {
   const colorScheme = useColorScheme();
   const [isUploading, setIsUploading] = useState(false);
@@ -69,7 +71,14 @@ export default function ImagePickerComponent({
       if (result && !result.canceled && result.assets && result.assets[0]) {
         const imageUri = result.assets[0].uri;
         setLocalImageUri(imageUri);
-        await uploadImage(imageUri);
+        
+        if (skipUpload) {
+          // Just return the local URI without uploading
+          onImageSelected(imageUri);
+        } else {
+          // Upload immediately (existing behavior)
+          await uploadImage(imageUri);
+        }
       }
     } catch (error) {
       console.error('Error selecting image:', error);
@@ -83,7 +92,14 @@ export default function ImagePickerComponent({
       if (result && !result.canceled && result.assets && result.assets[0]) {
         const imageUri = result.assets[0].uri;
         setLocalImageUri(imageUri);
-        await uploadImage(imageUri);
+        
+        if (skipUpload) {
+          // Just return the local URI without uploading
+          onImageSelected(imageUri);
+        } else {
+          // Upload immediately (existing behavior)
+          await uploadImage(imageUri);
+        }
       }
     } catch (error) {
       console.error('Error taking photo:', error);
@@ -94,6 +110,7 @@ export default function ImagePickerComponent({
   const uploadImage = async (imageUri: string) => {
     if (!eventTitle.trim()) {
       Alert.alert('Error', 'Please enter an event title before adding an image.');
+      setLocalImageUri(null); // Clear the local image since validation failed
       return;
     }
 
@@ -139,7 +156,7 @@ export default function ImagePickerComponent({
           style: 'destructive',
           onPress: () => {
             setLocalImageUri(null);
-            onImageSelected('');
+            onImageSelected(''); // Clear the image
           },
         },
       ]

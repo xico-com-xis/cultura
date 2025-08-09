@@ -111,14 +111,22 @@ export const uploadImageToSupabase = async (
         name: fileName,
       } as any);
       
-      // Upload using FormData
+      // Upload using FormData with timeout
       console.log('Uploading with FormData...');
-      const { data, error } = await supabase.storage
+      
+      // Create a promise that will timeout after 60 seconds
+      const uploadPromise = supabase.storage
         .from('event-images')
         .upload(filePath, formData, {
           cacheControl: '3600',
           upsert: false,
         });
+      
+      const timeoutPromise = new Promise((_, reject) => {
+        setTimeout(() => reject(new Error('Network request timed out')), 60000);
+      });
+      
+      const { data, error } = await Promise.race([uploadPromise, timeoutPromise]) as any;
 
       if (error) {
         console.error('FormData upload error:', error);
@@ -159,15 +167,22 @@ export const uploadImageToSupabase = async (
       throw new Error('Image blob is empty - the image URI might be invalid');
     }
 
-    // Try to upload directly
+    // Try to upload directly with timeout
     console.log('Attempting blob upload to event-images bucket...');
-    const { data, error } = await supabase.storage
+    
+    const uploadPromise = supabase.storage
       .from('event-images')
       .upload(filePath, blob, {
         cacheControl: '3600',
         upsert: false,
         contentType: 'image/jpeg'
       });
+    
+    const timeoutPromise = new Promise((_, reject) => {
+      setTimeout(() => reject(new Error('Network request timed out')), 60000);
+    });
+    
+    const { data, error } = await Promise.race([uploadPromise, timeoutPromise]) as any;
 
     if (error) {
       console.error('Supabase upload error details:', {

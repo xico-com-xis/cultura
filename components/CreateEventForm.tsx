@@ -1,5 +1,5 @@
 import DateTimePicker from '@react-native-community/datetimepicker';
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -23,6 +23,7 @@ import { useAuth } from '@/context/AuthContext';
 import { EventType, TicketInfo, useEvents } from '@/context/EventsContext';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { Coordinates, createFullAddress, geocodeAddress, getCityDefaultCoordinates } from '@/utils/geocoding';
+import { uploadImageToSupabase } from '@/utils/imageUpload';
 
 interface CreateEventFormProps {
   onClose: () => void;
@@ -54,7 +55,8 @@ export default function CreateEventForm({ onClose, onEventCreated }: CreateEvent
   const [selectedType, setSelectedType] = useState<EventType>('other');
   const [location, setLocation] = useState('');
   const [selectedCity, setSelectedCity] = useState(availableCities[0] || '');
-  const [imageUrl, setImageUrl] = useState('');
+  const [localImageUri, setLocalImageUri] = useState(''); // Store local image URI
+  const [uploadedImageUrl, setUploadedImageUrl] = useState(''); // Store uploaded URL
   
   // Location state
   const [coordinates, setCoordinates] = useState<Coordinates | null>(null);
@@ -108,17 +110,18 @@ export default function CreateEventForm({ onClose, onEventCreated }: CreateEvent
            description.trim() !== '' && 
            selectedCity !== '' &&
            coordinates !== null && // Precise location is now mandatory
-           imageUrl.trim() !== ''; // Image is now mandatory
+           localImageUri.trim() !== ''; // Local image is now mandatory
   };
 
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<string | null>(null);
 
   const handleSubmit = async () => {
     if (!isFormValid()) {
       let errorMessage = 'Please fill in all required fields';
       if (!coordinates) {
         errorMessage = 'Please set a precise location using "Find Address" or "Pick on Map" buttons.';
-      } else if (!imageUrl.trim()) {
+      } else if (!localImageUri.trim()) {
         errorMessage = 'Please add an image for your event.';
       }
       Alert.alert('Error', errorMessage);
@@ -137,6 +140,44 @@ export default function CreateEventForm({ onClose, onEventCreated }: CreateEvent
     setIsSubmitting(true);
 
     try {
+      // Upload image first if we have a local image
+      let finalImageUrl = uploadedImageUrl; // Use existing uploaded URL if available
+      
+      if (localImageUri && !finalImageUrl) {
+        try {
+          setUploadProgress('Uploading image...');
+          const uploadResult = await uploadImageToSupabase(localImageUri, user.id, title.trim());
+          if (uploadResult.success && uploadResult.url) {
+            finalImageUrl = uploadResult.url;
+            setUploadedImageUrl(uploadResult.url); // Store the uploaded URL
+            setUploadProgress('Creating event...');
+          } else {
+            throw new Error(uploadResult.error || 'Image upload failed');
+          }
+        } catch (uploadError) {
+          console.error('Image upload error:', uploadError);
+          
+          // Provide more specific error messages based on the error type
+          let errorMessage = 'Failed to upload image. Please try again.';
+          if (uploadError instanceof Error) {
+            if (uploadError.message.includes('timeout')) {
+              errorMessage = 'Image upload timed out. Please check your internet connection or try a smaller image.';
+            } else if (uploadError.message.includes('Network request timed out')) {
+              errorMessage = 'Network timeout. Please check your internet connection and try again.';
+            } else if (uploadError.message.includes('policy')) {
+              errorMessage = 'Permission error. Please contact support.';
+            }
+          }
+          
+          Alert.alert(
+            'Upload Error', 
+            errorMessage,
+            [{ text: 'OK' }]
+          );
+          return;
+        }
+      }
+
       // Prepare ticket info
       const ticketInfo: TicketInfo = {
         type: ticketType,
@@ -154,6 +195,7 @@ export default function CreateEventForm({ onClose, onEventCreated }: CreateEvent
       // If no coordinates from map picker, try geocoding
       if (!eventCoordinates && location.trim() && selectedCity && filters.selectedCountry) {
         try {
+          setUploadProgress('Finding location...');
           setIsGeocodingLoading(true);
           const fullAddress = createFullAddress(location.trim(), selectedCity, filters.selectedCountry);
           console.log('Attempting to geocode:', fullAddress);
@@ -170,6 +212,7 @@ export default function CreateEventForm({ onClose, onEventCreated }: CreateEvent
           eventCoordinates = getCityDefaultCoordinates(selectedCity);
         } finally {
           setIsGeocodingLoading(false);
+          setUploadProgress('Creating event...');
         }
       }
       
@@ -177,6 +220,8 @@ export default function CreateEventForm({ onClose, onEventCreated }: CreateEvent
       if (!eventCoordinates) {
         eventCoordinates = getCityDefaultCoordinates(selectedCity);
       }
+
+      setUploadProgress('Creating event...');
 
       // Create the event
       const newEvent = {
@@ -200,7 +245,7 @@ export default function CreateEventForm({ onClose, onEventCreated }: CreateEvent
         accessibility: [],
         ticketInfo,
         coordinates: eventCoordinates || undefined, // Convert null to undefined for type compatibility
-        image: imageUrl || undefined, // Include the uploaded image URL
+        image: finalImageUrl || undefined, // Include the uploaded image URL
       };
 
       await addEvent(newEvent);
@@ -227,6 +272,7 @@ export default function CreateEventForm({ onClose, onEventCreated }: CreateEvent
       );
     } finally {
       setIsSubmitting(false);
+      setUploadProgress(null);
     }
   };
 
@@ -348,7 +394,8 @@ export default function CreateEventForm({ onClose, onEventCreated }: CreateEvent
     setDescription('');
     setSelectedType('other');
     setLocation('');
-    setImageUrl('');
+    setLocalImageUri('');
+    setUploadedImageUrl('');
     setCoordinates(null);
     setShowLocationInput(false);
     setTicketType('free');
@@ -437,11 +484,12 @@ export default function CreateEventForm({ onClose, onEventCreated }: CreateEvent
           <View style={styles.inputContainer}>
             <ThemedText style={styles.label}>Event Image *</ThemedText>
             <ImagePickerComponent
-              onImageSelected={setImageUrl}
-              currentImageUrl={imageUrl}
+              onImageSelected={setLocalImageUri}
+              currentImageUrl={localImageUri}
               userId={user.id}
               eventTitle={title}
-              allowRemove={false}
+              allowRemove={true}
+              skipUpload={true}
             />
           </View>
         )}
@@ -730,9 +778,16 @@ export default function CreateEventForm({ onClose, onEventCreated }: CreateEvent
           onPress={handleSubmit}
           disabled={!isFormValid() || isSubmitting}
         >
-          <ThemedText style={styles.submitButtonText}>
-            {isSubmitting ? 'Creating Event...' : 'Create Event'}
-          </ThemedText>
+          {isSubmitting ? (
+            <View style={styles.submitButtonContent}>
+              <ActivityIndicator size="small" color="#fff" style={styles.loadingIndicator} />
+              <ThemedText style={styles.submitButtonText}>
+                {uploadProgress || 'Creating Event...'}
+              </ThemedText>
+            </View>
+          ) : (
+            <ThemedText style={styles.submitButtonText}>Create Event</ThemedText>
+          )}
         </TouchableOpacity>
       </ScrollView>
 
@@ -901,6 +956,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginTop: 20,
     marginBottom: 40,
+  },
+  submitButtonContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  loadingIndicator: {
+    marginRight: 8,
   },
   submitButtonText: {
     color: '#fff',
