@@ -277,50 +277,45 @@ export default function CreateEventForm({ onClose, onEventCreated }: CreateEvent
   };
 
   const onDateChange = (event: any, selectedDate?: Date) => {
-    console.log('Date picker event:', event.type, 'Selected date:', selectedDate, 'Current date:', eventDate);
     const currentDate = selectedDate || eventDate;
     
+    // Android always closes after selection
     if (Platform.OS === 'android') {
       setShowDatePicker(false);
+      if (event.type === 'set') {
+        if (datePickerMode === 'date') {
+          const newDate = new Date(eventDate);
+          newDate.setFullYear(currentDate.getFullYear());
+          newDate.setMonth(currentDate.getMonth());
+          newDate.setDate(currentDate.getDate());
+          setEventDate(newDate);
+        } else {
+          const newDate = new Date(eventDate);
+          newDate.setHours(currentDate.getHours());
+          newDate.setMinutes(currentDate.getMinutes());
+          setEventDate(newDate);
+        }
+      }
+      return;
     }
     
-    if (event.type === 'set' || Platform.OS !== 'android') {
-      // User confirmed the selection
+    // iOS handling - only close on dismiss
+    if (event.type === 'dismissed') {
+      setShowDatePicker(false);
+      setDatePickerMode('date');
+    } else {
+      // For all other events on iOS, just update the value and keep open
       if (datePickerMode === 'date') {
-        // Set the date part, keeping the current time
         const newDate = new Date(eventDate);
         newDate.setFullYear(currentDate.getFullYear());
         newDate.setMonth(currentDate.getMonth());
         newDate.setDate(currentDate.getDate());
-        console.log('Setting new date:', newDate);
         setEventDate(newDate);
-        
-        // On iOS, automatically show time picker after date selection
-        if (Platform.OS !== 'android') {
-          setTimeout(() => {
-            setDatePickerMode('time');
-            setShowDatePicker(true);
-          }, 300);
-        }
-      } else {
-        // Time mode - set the time part
+      } else if (datePickerMode === 'time') {
         const newDate = new Date(eventDate);
         newDate.setHours(currentDate.getHours());
         newDate.setMinutes(currentDate.getMinutes());
-        console.log('Setting new time:', newDate);
         setEventDate(newDate);
-        setDatePickerMode('date'); // Reset for next time
-        
-        if (Platform.OS !== 'android') {
-          setShowDatePicker(false);
-        }
-      }
-    } else if (event.type === 'dismissed') {
-      // User cancelled
-      console.log('Date picker dismissed');
-      setDatePickerMode('date'); // Reset for next time
-      if (Platform.OS !== 'android') {
-        setShowDatePicker(false);
       }
     }
   };

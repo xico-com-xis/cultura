@@ -4,9 +4,11 @@ import { IconSymbol } from '@/components/ui/IconSymbol';
 import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { Coordinates, getCityDefaultCoordinates } from '@/utils/geocoding';
+import * as Haptics from 'expo-haptics';
 import * as Location from 'expo-location';
-import React, { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
+    ActivityIndicator,
     Alert,
     Dimensions,
     Modal,
@@ -41,6 +43,8 @@ export default function LocationPicker({
   const [selectedLocation, setSelectedLocation] = useState<Coordinates | null>(
     initialLocation || null
   );
+  const [tempLocation, setTempLocation] = useState<Coordinates | null>(null);
+  const [isProcessingLocation, setIsProcessingLocation] = useState(false);
   const [region, setRegion] = useState<Region>({
     latitude: initialLocation?.latitude || 38.7223, // Default to Lisboa
     longitude: initialLocation?.longitude || -9.1393,
@@ -65,12 +69,52 @@ export default function LocationPicker({
     }
   }, [visible, city, initialLocation]);
 
-  const handleMapPress = async (event: any) => {
-    const coordinate = event.nativeEvent.coordinate;
-    setSelectedLocation(coordinate);
+  // Debug selectedLocation changes
+  useEffect(() => {
+    console.log('selectedLocation changed:', selectedLocation);
+  }, [selectedLocation]);
 
-    // Optional: Reverse geocode to get address
+  const handleMapPress = (event: any) => {
+    const coordinate = event.nativeEvent.coordinate;
+    console.log('Map pressed at:', coordinate, 'Event details:', {
+      action: event.nativeEvent.action,
+      target: event.nativeEvent.target,
+    });
+    
+    console.log('Setting selectedLocation to:', coordinate);
+    
+    // Force immediate update using multiple approaches
+    setSelectedLocation(() => {
+      console.log('State update function called with:', coordinate);
+      return coordinate;
+    });
+    
+    // Also set temp location as backup
+    setTempLocation(coordinate);
+    
+    // Try to force a map update
+    if (mapRef.current) {
+      console.log('Forcing map to update region slightly');
+      const currentRegion = region;
+      mapRef.current.animateToRegion({
+        ...currentRegion,
+        latitude: coordinate.latitude,
+        longitude: coordinate.longitude,
+      }, 0); // 0ms animation = immediate
+    }
+    
+    console.log('selectedLocation should be set now');
+    
+    // Provide haptic feedback for immediate response
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    
+    // Do reverse geocoding in background without blocking UI
+    handleReverseGeocode(coordinate);
+  };
+
+  const handleReverseGeocode = async (coordinate: Coordinates) => {
     try {
+      setIsProcessingLocation(true);
       const reverseGeocodedLocation = await Location.reverseGeocodeAsync(coordinate);
       if (reverseGeocodedLocation.length > 0) {
         const location = reverseGeocodedLocation[0];
@@ -78,40 +122,18 @@ export default function LocationPicker({
       }
     } catch (error) {
       console.log('Reverse geocoding failed:', error);
+    } finally {
+      setIsProcessingLocation(false);
     }
   };
 
-  const handleCurrentLocation = async () => {
-    try {
-      const { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== 'granted') {
-        Alert.alert(
-          'Permission Required',
-          'Location permission is required to use your current location.'
-        );
-        return;
-      }
-
-      const currentLocation = await Location.getCurrentPositionAsync({});
-      const coordinate = {
-        latitude: currentLocation.coords.latitude,
-        longitude: currentLocation.coords.longitude,
-      };
-
-      setSelectedLocation(coordinate);
-      const newRegion = {
-        ...coordinate,
-        latitudeDelta: 0.0922,
-        longitudeDelta: 0.0421,
-      };
-      setRegion(newRegion);
-      
-      if (mapRef.current) {
-        mapRef.current.animateToRegion(newRegion, 1000);
-      }
-    } catch (error) {
-      Alert.alert('Error', 'Failed to get your current location.');
-    }
+  const handleMarkerDragEnd = (event: any) => {
+    const coordinate = event.nativeEvent.coordinate;
+    console.log('Marker dragged to:', coordinate);
+    setSelectedLocation(coordinate);
+    
+    // Do reverse geocoding in background
+    handleReverseGeocode(coordinate);
   };
 
   const handleConfirm = () => {
@@ -144,21 +166,13 @@ export default function LocationPicker({
           
           <ThemedText style={styles.headerTitle}>Select Location</ThemedText>
           
-          <TouchableOpacity 
-            onPress={handleConfirm} 
-            style={[styles.headerButton, { opacity: selectedLocation ? 1 : 0.5 }]}
-            disabled={!selectedLocation}
-          >
-            <ThemedText style={[styles.headerButtonText, { color: Colors[colorScheme ?? 'light'].tint }]}>
-              Confirm
-            </ThemedText>
-          </TouchableOpacity>
+          <View style={styles.headerButton} />
         </View>
 
         {/* Instructions */}
         <View style={styles.instructionsContainer}>
           <ThemedText style={styles.instructions}>
-            Tap on the map to select the exact location for your event
+            Tap anywhere on the map to place a pin. You can tap on buildings, landmarks, or empty space.
           </ThemedText>
         </View>
 
@@ -170,36 +184,74 @@ export default function LocationPicker({
           region={region}
           onRegionChangeComplete={setRegion}
           onPress={handleMapPress}
+          onLongPress={handleMapPress} // Alternative way to place pin
+          onPoiClick={handleMapPress} // Handle POI clicks the same as regular map clicks
           showsUserLocation
           showsMyLocationButton={false}
+          showsPointsOfInterest={true} // Keep POIs visible but handle clicks
+          showsBuildings={true}
+          scrollEnabled={true}
+          zoomEnabled={true}
+          rotateEnabled={false}
+          pitchEnabled={false}
+          toolbarEnabled={false}
+          moveOnMarkerPress={false}
+          minZoomLevel={10}
+          maxZoomLevel={20}
+          onMapReady={() => {
+            console.log('Map is ready');
+          }}
         >
-          {selectedLocation && (
+          {(selectedLocation || tempLocation) && (
             <Marker
-              coordinate={selectedLocation}
+              key={`marker-${(selectedLocation || tempLocation)!.latitude}-${(selectedLocation || tempLocation)!.longitude}`} // Force re-render
+              coordinate={selectedLocation || tempLocation!}
               pinColor={Colors[colorScheme ?? 'light'].tint}
               title="Event Location"
-              description="Selected location for your event"
+              description="Drag to adjust or tap map to relocate"
+              draggable={true}
+              onDragEnd={handleMarkerDragEnd}
+              onDragStart={() => {
+                console.log('Marker drag started');
+              }}
             />
           )}
         </MapView>
 
         {/* Bottom Controls */}
         <View style={[styles.bottomControls, { backgroundColor: Colors[colorScheme ?? 'light'].background }]}>
-          <TouchableOpacity 
-            style={[styles.locationButton, { backgroundColor: Colors[colorScheme ?? 'light'].tint }]}
-            onPress={handleCurrentLocation}
-          >
-            <IconSymbol name="location" size={20} color="white" />
-            <Text style={styles.locationButtonText}>Use Current Location</Text>
-          </TouchableOpacity>
-
           {selectedLocation && (
             <View style={styles.coordinatesInfo}>
-              <ThemedText style={styles.coordinatesText}>
-                📍 Lat: {selectedLocation.latitude.toFixed(6)}, Lng: {selectedLocation.longitude.toFixed(6)}
-              </ThemedText>
+              {isProcessingLocation ? (
+                <View style={styles.processingContainer}>
+                  <ActivityIndicator size="small" color={Colors[colorScheme ?? 'light'].tint} />
+                  <ThemedText style={styles.processingText}>Processing location...</ThemedText>
+                </View>
+              ) : (
+                <ThemedText style={styles.coordinatesText}>
+                  📍 Selected: {selectedLocation.latitude.toFixed(6)}, {selectedLocation.longitude.toFixed(6)}
+                </ThemedText>
+              )}
             </View>
           )}
+
+          <TouchableOpacity 
+            style={[
+              styles.confirmButton, 
+              { 
+                backgroundColor: selectedLocation 
+                  ? Colors[colorScheme ?? 'light'].tint 
+                  : Colors[colorScheme ?? 'light'].text + '30',
+              }
+            ]}
+            onPress={handleConfirm}
+            disabled={!selectedLocation || isProcessingLocation}
+          >
+            <IconSymbol name="checkmark" size={20} color="white" />
+            <Text style={styles.confirmButtonText}>
+              {selectedLocation ? 'Confirm Location' : 'Tap map to select location'}
+            </Text>
+          </TouchableOpacity>
         </View>
       </ThemedView>
     </Modal>
@@ -247,22 +299,33 @@ const styles = StyleSheet.create({
     padding: 20,
     paddingBottom: 40, // Account for safe area
   },
-  locationButton: {
+  confirmButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 12,
+    paddingVertical: 16,
     paddingHorizontal: 20,
-    borderRadius: 8,
-    marginBottom: 10,
+    borderRadius: 12,
+    marginTop: 10,
   },
-  locationButtonText: {
+  confirmButtonText: {
     color: 'white',
     fontWeight: '600',
+    fontSize: 16,
     marginLeft: 8,
   },
   coordinatesInfo: {
     alignItems: 'center',
+    marginBottom: 8,
+  },
+  processingContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  processingText: {
+    fontSize: 12,
+    opacity: 0.7,
   },
   coordinatesText: {
     fontSize: 12,
