@@ -24,6 +24,32 @@ export default function NotificationsFavoritesScreen() {
   const [showNotificationSettings, setShowNotificationSettings] = useState(false);
   const slideAnim = useState(new Animated.Value(0))[0];
 
+  // Animation values for each toggle
+  const toggleAnims = useState(() => {
+    const anims: Record<string, Animated.Value> = {};
+    ['reminders', 'updates', 'changes'].forEach(type => {
+      anims[type] = new Animated.Value(0);
+    });
+    return anims;
+  })[0];
+
+  // Initialize toggle animations based on current state
+  useEffect(() => {
+    ['reminders', 'updates', 'changes'].forEach(type => {
+      const isEnabled = isGlobalNotificationEnabled(type as NotificationType);
+      toggleAnims[type].setValue(isEnabled ? 1 : 0);
+    });
+  }, []);
+
+  const animateToggle = (type: NotificationType, toValue: number) => {
+    Animated.spring(toggleAnims[type], {
+      toValue,
+      useNativeDriver: true,
+      tension: 100,
+      friction: 8,
+    }).start();
+  };
+
   useEffect(() => {
     if (showNotificationSettings) {
       Animated.spring(slideAnim, {
@@ -123,8 +149,17 @@ export default function NotificationsFavoritesScreen() {
   const handleNotificationToggle = async (notificationType: NotificationType) => {
     try {
       const currentState = isGlobalNotificationEnabled(notificationType);
-      await updateGlobalNotificationSetting(notificationType, !currentState);
+      const newState = !currentState;
+      
+      // Animate the toggle immediately for responsive feel
+      animateToggle(notificationType, newState ? 1 : 0);
+      
+      await updateGlobalNotificationSetting(notificationType, newState);
     } catch (error) {
+      // Revert animation on error
+      const currentState = isGlobalNotificationEnabled(notificationType);
+      animateToggle(notificationType, currentState ? 1 : 0);
+      
       Alert.alert('Error', 'Failed to update notification settings');
       console.error('Notification toggle error:', error);
     }
@@ -293,10 +328,9 @@ export default function NotificationsFavoritesScreen() {
             </ThemedText>
 
             {notificationTypes.map((notif) => (
-              <TouchableOpacity
+              <View
                 key={notif.type}
                 style={styles.notificationItem}
-                onPress={() => handleNotificationToggle(notif.type)}
               >
                 <View style={styles.notificationContent}>
                   <View style={styles.notificationText}>
@@ -305,17 +339,39 @@ export default function NotificationsFavoritesScreen() {
                       {notif.description}
                     </ThemedText>
                   </View>
-                  <View style={[
-                    styles.notificationToggle,
-                    isGlobalNotificationEnabled(notif.type) && styles.notificationToggleActive
-                  ]}>
-                    <View style={[
-                      styles.notificationToggleThumb,
-                      isGlobalNotificationEnabled(notif.type) && styles.notificationToggleThumbActive
-                    ]} />
-                  </View>
+                  <Animated.View
+                    style={[
+                      styles.notificationToggle,
+                      {
+                        backgroundColor: toggleAnims[notif.type].interpolate({
+                          inputRange: [0, 1],
+                          outputRange: ['#e0e0e0', '#4C8BF5'],
+                        })
+                      }
+                    ]}
+                  >
+                    <TouchableOpacity
+                      style={styles.notificationToggleButton}
+                      activeOpacity={0.8}
+                      onPress={() => handleNotificationToggle(notif.type)}
+                    >
+                      <Animated.View 
+                        style={[
+                          styles.notificationToggleThumb,
+                          {
+                            transform: [{
+                              translateX: toggleAnims[notif.type].interpolate({
+                                inputRange: [0, 1],
+                                outputRange: [0, 20],
+                              })
+                            }]
+                          }
+                        ]} 
+                      />
+                    </TouchableOpacity>
+                  </Animated.View>
                 </View>
-              </TouchableOpacity>
+              </View>
             ))}
             </ThemedView>
           </Animated.View>
@@ -447,8 +503,9 @@ const styles = StyleSheet.create({
     borderTopRightRadius: 20,
     paddingHorizontal: 20,
     paddingTop: 20,
-    paddingBottom: 40,
+    paddingBottom: 60,
     maxHeight: '80%',
+    minHeight: 400,
   },
   modalHeader: {
     flexDirection: 'row',
@@ -506,6 +563,13 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingHorizontal: 2,
   },
+  notificationToggleButton: {
+    width: '100%',
+    height: '100%',
+    justifyContent: 'center',
+    alignItems: 'flex-start',
+    paddingHorizontal: 2,
+  },
   notificationToggleActive: {
     backgroundColor: '#4C8BF5',
   },
@@ -519,8 +583,5 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.3,
     shadowRadius: 2,
     elevation: 2,
-  },
-  notificationToggleThumbActive: {
-    transform: [{ translateX: 20 }],
   },
 });
