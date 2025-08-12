@@ -44,6 +44,17 @@ const eventTypeOptions: Array<{ type: EventType; label: string; icon: string }> 
   { type: 'other', label: 'Other', icon: '🔖' }
 ];
 
+// Weekdays for recurring events (Sunday = 0, Monday = 1, etc.)
+const weekdays = [
+  { day: 1, label: 'Mon', fullName: 'Monday' },
+  { day: 2, label: 'Tue', fullName: 'Tuesday' },
+  { day: 3, label: 'Wed', fullName: 'Wednesday' },
+  { day: 4, label: 'Thu', fullName: 'Thursday' },
+  { day: 5, label: 'Fri', fullName: 'Friday' },
+  { day: 6, label: 'Sat', fullName: 'Saturday' },
+  { day: 0, label: 'Sun', fullName: 'Sunday' }
+];
+
 export default function CreateEventForm({ onClose, onEventCreated }: CreateEventFormProps) {
   const colorScheme = useColorScheme();
   const { addEvent, filters, availableCities } = useEvents();
@@ -68,6 +79,16 @@ export default function CreateEventForm({ onClose, onEventCreated }: CreateEvent
   const [eventDate, setEventDate] = useState(new Date());
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [datePickerMode, setDatePickerMode] = useState<'date' | 'time'>('date');
+  
+  // Recurring events state
+  const [isRecurring, setIsRecurring] = useState(false);
+  const [selectedWeekdays, setSelectedWeekdays] = useState<Set<number>>(new Set());
+  const [recurringEndDate, setRecurringEndDate] = useState(() => {
+    const endDate = new Date();
+    endDate.setMonth(endDate.getMonth() + 3); // Default 3 months from now
+    return endDate;
+  });
+  const [showRecurringEndDatePicker, setShowRecurringEndDatePicker] = useState(false);
   
   // Ticket info state
   const [ticketType, setTicketType] = useState<'free' | 'paid' | 'donation'>('free');
@@ -106,11 +127,74 @@ export default function CreateEventForm({ onClose, onEventCreated }: CreateEvent
 
   // Validation and submission
   const isFormValid = () => {
-    return title.trim() !== '' && 
+    const baseValid = title.trim() !== '' && 
            description.trim() !== '' && 
            selectedCity !== '' &&
            coordinates !== null && // Precise location is now mandatory
            localImageUri.trim() !== ''; // Local image is now mandatory
+    
+    // Check if event starts at least 8 hours from now
+    const now = new Date();
+    const minimumStartTime = new Date(now.getTime() + 8 * 60 * 60 * 1000); // 8 hours from now
+    const eventStartsInTime = eventDate >= minimumStartTime;
+    
+    if (isRecurring) {
+      return baseValid && selectedWeekdays.size > 0 && eventStartsInTime; // Must select at least one weekday and start in future
+    }
+    
+    return baseValid && eventStartsInTime;
+  };
+
+  const getMinimumDateTime = () => {
+    const now = new Date();
+    return new Date(now.getTime() + 8 * 60 * 60 * 1000); // 8 hours from now
+  };
+
+  // Generate recurring event dates
+  const generateRecurringDates = () => {
+    if (!isRecurring || selectedWeekdays.size === 0) {
+      return [{
+        date: eventDate.toISOString(),
+      }];
+    }
+
+    const dates = [];
+    const startDate = new Date(eventDate);
+    const endDate = new Date(recurringEndDate);
+    const currentDate = new Date(startDate);
+
+    // Set currentDate to the start of the week containing eventDate
+    currentDate.setDate(startDate.getDate() - startDate.getDay());
+
+    while (currentDate <= endDate) {
+      for (const weekday of selectedWeekdays) {
+        const eventDateForWeekday = new Date(currentDate);
+        eventDateForWeekday.setDate(currentDate.getDate() + weekday);
+        eventDateForWeekday.setHours(startDate.getHours());
+        eventDateForWeekday.setMinutes(startDate.getMinutes());
+
+        // Only include dates that are >= startDate and <= endDate
+        if (eventDateForWeekday >= startDate && eventDateForWeekday <= endDate) {
+          dates.push({
+            date: eventDateForWeekday.toISOString(),
+          });
+        }
+      }
+      // Move to next week
+      currentDate.setDate(currentDate.getDate() + 7);
+    }
+
+    return dates.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+  };
+
+  const toggleWeekday = (day: number) => {
+    const newSelected = new Set(selectedWeekdays);
+    if (newSelected.has(day)) {
+      newSelected.delete(day);
+    } else {
+      newSelected.add(day);
+    }
+    setSelectedWeekdays(newSelected);
   };
 
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -119,10 +203,17 @@ export default function CreateEventForm({ onClose, onEventCreated }: CreateEvent
   const handleSubmit = async () => {
     if (!isFormValid()) {
       let errorMessage = 'Please fill in all required fields';
+      const now = new Date();
+      const minimumStartTime = new Date(now.getTime() + 8 * 60 * 60 * 1000);
+      
       if (!coordinates) {
         errorMessage = 'Please set a precise location using "Find Address" or "Pick on Map" buttons.';
       } else if (!localImageUri.trim()) {
         errorMessage = 'Please add an image for your event.';
+      } else if (eventDate < minimumStartTime) {
+        errorMessage = 'Events must start at least 8 hours from now to give people time to discover and plan.';
+      } else if (isRecurring && selectedWeekdays.size === 0) {
+        errorMessage = 'Please select at least one day of the week for recurring events.';
       }
       Alert.alert('Error', errorMessage);
       return;
@@ -227,11 +318,7 @@ export default function CreateEventForm({ onClose, onEventCreated }: CreateEvent
       const newEvent = {
         title: title.trim(),
         type: selectedType,
-        schedule: [
-          {
-            date: eventDate.toISOString(),
-          },
-        ],
+        schedule: generateRecurringDates(),
         location: location.trim(),
         city: selectedCity,
         country: filters.selectedCountry,
@@ -320,6 +407,27 @@ export default function CreateEventForm({ onClose, onEventCreated }: CreateEvent
     }
   };
 
+  const onRecurringEndDateChange = (event: any, selectedDate?: Date) => {
+    const currentDate = selectedDate || recurringEndDate;
+    
+    // Android always closes after selection
+    if (Platform.OS === 'android') {
+      setShowRecurringEndDatePicker(false);
+      if (event.type === 'set') {
+        setRecurringEndDate(currentDate);
+      }
+      return;
+    }
+    
+    // iOS handling - only close on dismiss
+    if (event.type === 'dismissed') {
+      setShowRecurringEndDatePicker(false);
+    } else {
+      // For all other events on iOS, just update the value and keep open
+      setRecurringEndDate(currentDate);
+    }
+  };
+
   // Location-related functions
   const handleGeocode = async () => {
     // Show location input if not already shown
@@ -396,6 +504,11 @@ export default function CreateEventForm({ onClose, onEventCreated }: CreateEvent
     setTicketType('free');
     setTicketPrice('');
     setPurchaseLink('');
+    setIsRecurring(false);
+    setSelectedWeekdays(new Set());
+    const newEndDate = new Date();
+    newEndDate.setMonth(newEndDate.getMonth() + 3);
+    setRecurringEndDate(newEndDate);
   };
 
   return (
@@ -683,6 +796,107 @@ export default function CreateEventForm({ onClose, onEventCreated }: CreateEvent
               </ThemedText>
             </TouchableOpacity>
           </View>
+          
+          {/* Time restriction helper */}
+          <View style={styles.timeRestrictionContainer}>
+            <IconSymbol 
+              name={eventDate >= getMinimumDateTime() ? "checkmark.circle" : "exclamationmark.triangle"} 
+              size={14} 
+              color={eventDate >= getMinimumDateTime() ? Colors[colorScheme ?? 'light'].tint : "#ff9500"} 
+            />
+            <ThemedText style={[
+              styles.timeRestrictionText,
+              { color: eventDate >= getMinimumDateTime() ? Colors[colorScheme ?? 'light'].text + '70' : "#ff9500" }
+            ]}>
+              {eventDate >= getMinimumDateTime() 
+                ? "✓ Event starts with enough notice time" 
+                : "⚠️ Events must start at least 8 hours from now"
+              }
+            </ThemedText>
+          </View>
+        </View>
+
+        {/* Recurring Events */}
+        <View style={styles.inputContainer}>
+          <ThemedText style={styles.label}>Recurring Event</ThemedText>
+          <TouchableOpacity
+            style={[
+              styles.recurringToggle,
+              isRecurring && {
+                backgroundColor: Colors[colorScheme ?? 'light'].tint,
+                borderColor: Colors[colorScheme ?? 'light'].tint,
+              },
+            ]}
+            onPress={() => setIsRecurring(!isRecurring)}
+          >
+            <IconSymbol 
+              name={isRecurring ? "checkmark.circle.fill" : "circle"} 
+              size={20} 
+              color={isRecurring ? "white" : Colors[colorScheme ?? 'light'].text + '70'} 
+            />
+            <ThemedText style={[
+              styles.recurringToggleText,
+              isRecurring && { color: 'white' }
+            ]}>
+              Repeat weekly on selected days
+            </ThemedText>
+          </TouchableOpacity>
+          
+          {isRecurring && (
+            <View style={styles.recurringOptions}>
+              <ThemedText style={styles.sublabel}>Select days of the week</ThemedText>
+              <View style={styles.weekdaysContainer}>
+                {weekdays.map((weekday) => (
+                  <TouchableOpacity
+                    key={weekday.day}
+                    style={[
+                      styles.weekdayButton,
+                      selectedWeekdays.has(weekday.day) && {
+                        backgroundColor: Colors[colorScheme ?? 'light'].tint,
+                        borderColor: Colors[colorScheme ?? 'light'].tint,
+                      },
+                    ]}
+                    onPress={() => toggleWeekday(weekday.day)}
+                  >
+                    <ThemedText style={[
+                      styles.weekdayButtonText,
+                      selectedWeekdays.has(weekday.day) && { color: 'white' }
+                    ]}>
+                      {weekday.label}
+                    </ThemedText>
+                  </TouchableOpacity>
+                ))}
+              </View>
+              
+              <View style={styles.recurringEndDateContainer}>
+                <ThemedText style={styles.sublabel}>End date for recurring events</ThemedText>
+                <TouchableOpacity
+                  style={[
+                    styles.dateButton,
+                    {
+                      borderColor: Colors[colorScheme ?? 'light'].text + '30',
+                    },
+                  ]}
+                  onPress={() => setShowRecurringEndDatePicker(true)}
+                >
+                  <IconSymbol name="calendar" size={18} color={Colors[colorScheme ?? 'light'].text} />
+                  <ThemedText style={styles.dateButtonText}>
+                    {recurringEndDate.toLocaleDateString('en-US', { 
+                      year: 'numeric', 
+                      month: 'short', 
+                      day: 'numeric' 
+                    })}
+                  </ThemedText>
+                </TouchableOpacity>
+                
+                {selectedWeekdays.size > 0 && (
+                  <ThemedText style={styles.recurringPreview}>
+                    Will create {generateRecurringDates().length} events
+                  </ThemedText>
+                )}
+              </View>
+            </View>
+          )}
         </View>
 
         {/* Ticket Information */}
@@ -818,6 +1032,7 @@ export default function CreateEventForm({ onClose, onEventCreated }: CreateEvent
                 themeVariant={colorScheme ?? 'light'}
                 textColor={Colors[colorScheme ?? 'light'].text}
                 accentColor={Colors[colorScheme ?? 'light'].tint}
+                minimumDate={getMinimumDateTime()}
                 style={{
                   backgroundColor: Colors[colorScheme ?? 'light'].background,
                 }}
@@ -839,6 +1054,7 @@ export default function CreateEventForm({ onClose, onEventCreated }: CreateEvent
           themeVariant={colorScheme ?? 'light'}
           textColor={Colors[colorScheme ?? 'light'].text}
           accentColor={Colors[colorScheme ?? 'light'].tint}
+          minimumDate={getMinimumDateTime()}
         />
       )}
       
@@ -851,6 +1067,61 @@ export default function CreateEventForm({ onClose, onEventCreated }: CreateEvent
         city={selectedCity}
         country={filters.selectedCountry}
       />
+
+      {/* Recurring End Date Picker */}
+      {showRecurringEndDatePicker && Platform.OS === 'ios' && (
+        <Modal
+          transparent={true}
+          animationType="fade"
+          visible={showRecurringEndDatePicker}
+          onRequestClose={() => setShowRecurringEndDatePicker(false)}
+        >
+          <Pressable 
+            style={styles.modalOverlay}
+            onPress={() => setShowRecurringEndDatePicker(false)}
+          >
+            <Pressable 
+              style={[
+                styles.pickerContainer,
+                { backgroundColor: Colors[colorScheme ?? 'light'].background }
+              ]} 
+              onPress={(e) => e.stopPropagation()}
+            >
+              <DateTimePicker
+                testID="recurringEndDatePicker"
+                value={recurringEndDate}
+                mode="date"
+                is24Hour={true}
+                display="spinner"
+                onChange={onRecurringEndDateChange}
+                themeVariant={colorScheme ?? 'light'}
+                textColor={Colors[colorScheme ?? 'light'].text}
+                accentColor={Colors[colorScheme ?? 'light'].tint}
+                minimumDate={getMinimumDateTime()}
+                style={{
+                  backgroundColor: Colors[colorScheme ?? 'light'].background,
+                }}
+              />
+            </Pressable>
+          </Pressable>
+        </Modal>
+      )}
+      
+      {/* Android Recurring End Date Picker */}
+      {showRecurringEndDatePicker && Platform.OS === 'android' && (
+        <DateTimePicker
+          testID="recurringEndDatePicker"
+          value={recurringEndDate}
+          mode="date"
+          is24Hour={true}
+          display="default"
+          onChange={onRecurringEndDateChange}
+          themeVariant={colorScheme ?? 'light'}
+          textColor={Colors[colorScheme ?? 'light'].text}
+          accentColor={Colors[colorScheme ?? 'light'].tint}
+          minimumDate={getMinimumDateTime()}
+        />
+      )}
     </ThemedView>
   );
 }
@@ -1061,5 +1332,66 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.25,
     shadowRadius: 3.84,
     elevation: 5,
+  },
+  recurringToggle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(0, 0, 0, 0.1)',
+    gap: 12,
+  },
+  recurringToggleText: {
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  recurringOptions: {
+    marginTop: 16,
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(0, 0, 0, 0.1)',
+  },
+  weekdaysContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginVertical: 12,
+  },
+  weekdayButton: {
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(0, 0, 0, 0.2)',
+    minWidth: 44,
+    alignItems: 'center',
+  },
+  weekdayButtonText: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  recurringEndDateContainer: {
+    marginTop: 16,
+  },
+  recurringPreview: {
+    fontSize: 12,
+    color: '#666',
+    fontStyle: 'italic',
+    marginTop: 8,
+    textAlign: 'center',
+  },
+  timeRestrictionContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 8,
+    paddingHorizontal: 4,
+    gap: 6,
+  },
+  timeRestrictionText: {
+    fontSize: 12,
+    fontWeight: '500',
+    flex: 1,
   },
 });
