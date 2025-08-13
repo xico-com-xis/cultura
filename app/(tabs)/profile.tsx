@@ -188,10 +188,16 @@ function LoginForm() {
 }
 
 export default function ProfileScreen() {
-  const { filters, availableCountries, setSelectedCountry } = useEvents();
+  const { filters, availableCountries, setSelectedCountry, events } = useEvents();
   const { user, signOut } = useAuth();
   const colorScheme = useColorScheme();
   const [countryModalVisible, setCountryModalVisible] = useState(false);
+
+  // Get user's created events count
+  const userEventsCount = user ? events.filter(event => event.organizer.id === user.id).length : 0;
+  const totalOccurrences = user ? events
+    .filter(event => event.organizer.id === user.id)
+    .reduce((total, event) => total + event.schedule.length, 0) : 0;
 
   // Country flag mapping
   const countryFlags: Record<string, string> = {
@@ -237,11 +243,17 @@ export default function ProfileScreen() {
       {user ? (
         // Show user profile when authenticated
         <>
+          <ScrollView 
+            style={styles.scrollViewContainer}
+            contentContainerStyle={styles.scrollContent}
+            showsVerticalScrollIndicator={true}
+            indicatorStyle="default"
+          >
           <ThemedView style={styles.profileInfo}>
             <View style={styles.userAvatarContainer}>
               <IconSymbol 
                 name="person.crop.circle.fill" 
-                size={80} 
+                size={60} 
                 color={Colors[colorScheme ?? 'light'].tint}
               />
             </View>
@@ -253,28 +265,35 @@ export default function ProfileScreen() {
               style={[styles.signOutButton, { backgroundColor: '#DC2626' }]}
               onPress={handleSignOut}
             >
-              <IconSymbol name="rectangle.portrait.and.arrow.right" size={20} color="white" />
+              <IconSymbol name="rectangle.portrait.and.arrow.right" size={18} color="white" />
               <ThemedText style={styles.signOutText}>Sign Out</ThemedText>
             </TouchableOpacity>
           </ThemedView>
 
-          {/* Country Selection Section - only show when logged in */}
+          {/* My Created Events Section - Move to top for visibility */}
           <ThemedView style={styles.section}>
-            <ThemedText type="defaultSemiBold" style={styles.sectionTitle}>Location Settings</ThemedText>
-            <ThemedText style={styles.sectionDescription}>
-              Select your country to see relevant events and cities in your area.
-            </ThemedText>
+            <ThemedText type="defaultSemiBold" style={styles.sectionTitle}>My Events</ThemedText>
             
             <TouchableOpacity 
-              style={styles.countrySelector}
-              onPress={() => setCountryModalVisible(true)}
+              style={styles.menuItem}
+              onPress={() => router.push('/my-events' as any)}
             >
-              <View style={styles.countrySelectorContent}>
-                <View>
-                  <ThemedText style={styles.countryLabel}>Country</ThemedText>
-                  <ThemedText style={styles.countryValue}>
-                    {countryFlags[filters.selectedCountry] || '🌍'} {filters.selectedCountry}
-                  </ThemedText>
+              <View style={styles.menuItemContent}>
+                <View style={styles.menuItemLeft}>
+                  <IconSymbol 
+                    name="calendar.badge.plus" 
+                    size={24} 
+                    color={Colors[colorScheme ?? 'light'].tint} 
+                  />
+                  <View style={styles.menuItemText}>
+                    <ThemedText style={styles.menuItemTitle}>My Created Events</ThemedText>
+                    <ThemedText style={styles.menuItemSubtitle}>
+                      {userEventsCount === 0 
+                        ? 'Create your first event'
+                        : `${userEventsCount} ${userEventsCount === 1 ? 'event' : 'events'} created${totalOccurrences > userEventsCount ? ` • ${totalOccurrences} occurrences` : ''}`
+                      }
+                    </ThemedText>
+                  </View>
                 </View>
                 <IconSymbol 
                   name="chevron.right" 
@@ -284,7 +303,7 @@ export default function ProfileScreen() {
               </View>
             </TouchableOpacity>
           </ThemedView>
-          
+
           {/* Notifications & Favorites Section */}
           <ThemedView style={styles.section}>
             <ThemedText type="defaultSemiBold" style={styles.sectionTitle}>Preferences</ThemedText>
@@ -303,7 +322,38 @@ export default function ProfileScreen() {
                   <View style={styles.menuItemText}>
                     <ThemedText style={styles.menuItemTitle}>Notifications & Favorites</ThemedText>
                     <ThemedText style={styles.menuItemSubtitle}>
-                      Manage followed organizers and event notifications
+                      Manage followed organizers
+                    </ThemedText>
+                  </View>
+                </View>
+                <IconSymbol 
+                  name="chevron.right" 
+                  size={20} 
+                  color={Colors[colorScheme ?? 'light'].text} 
+                />
+              </View>
+            </TouchableOpacity>
+          </ThemedView>
+
+          {/* Country Selection Section - Moved to last */}
+          <ThemedView style={styles.section}>
+            <ThemedText type="defaultSemiBold" style={styles.sectionTitle}>Location</ThemedText>
+            
+            <TouchableOpacity 
+              style={styles.menuItem}
+              onPress={() => setCountryModalVisible(true)}
+            >
+              <View style={styles.menuItemContent}>
+                <View style={styles.menuItemLeft}>
+                  <IconSymbol 
+                    name="location.fill" 
+                    size={24} 
+                    color={Colors[colorScheme ?? 'light'].tint} 
+                  />
+                  <View style={styles.menuItemText}>
+                    <ThemedText style={styles.menuItemTitle}>Country Settings</ThemedText>
+                    <ThemedText style={styles.menuItemSubtitle}>
+                      {countryFlags[filters.selectedCountry] || '🌍'} {filters.selectedCountry}
                     </ThemedText>
                   </View>
                 </View>
@@ -316,61 +366,59 @@ export default function ProfileScreen() {
             </TouchableOpacity>
           </ThemedView>
           
-          <ThemedView style={styles.section}>
-            <ThemedText type="defaultSemiBold">My Events</ThemedText>
-            <ThemedText>You haven't subscribed to any events yet.</ThemedText>
-          </ThemedView>
+          <View style={{ height: 30 }} />
+        </ScrollView>
 
-          {/* Country Selection Modal */}
-          <View 
-            style={[
-              styles.modalOverlay,
-              countryModalVisible && { backgroundColor: 'rgb(0, 0, 0)' }
-            ]}
-            pointerEvents={countryModalVisible ? 'auto' : 'none'}
-          ></View>
-          <Modal
-            visible={countryModalVisible}
-            animationType="slide"
-            transparent={true}
-            onRequestClose={() => setCountryModalVisible(false)}
-          >
-            <View style={styles.modalContainer}>
-              <ThemedView style={[styles.modalContent, { backgroundColor: Colors[colorScheme ?? 'light'].background }]}>
-                <View style={styles.modalHeader}>
-                  <ThemedText style={styles.modalTitle}>Select Country</ThemedText>
+        {/* Country Selection Modal */}
+        <View 
+          style={[
+            styles.modalOverlay,
+            countryModalVisible && { backgroundColor: 'rgb(0, 0, 0)' }
+          ]}
+          pointerEvents={countryModalVisible ? 'auto' : 'none'}
+        ></View>
+        <Modal
+          visible={countryModalVisible}
+          animationType="slide"
+          transparent={true}
+          onRequestClose={() => setCountryModalVisible(false)}
+        >
+          <View style={styles.modalContainer}>
+            <ThemedView style={[styles.modalContent, { backgroundColor: Colors[colorScheme ?? 'light'].background }]}>
+              <View style={styles.modalHeader}>
+                <ThemedText style={styles.modalTitle}>Select Country</ThemedText>
+                <TouchableOpacity
+                  style={styles.closeButton}
+                  onPress={() => setCountryModalVisible(false)}
+                >
+                  <ThemedText style={styles.closeButtonText}>✕</ThemedText>
+                </TouchableOpacity>
+              </View>
+
+              <ScrollView style={styles.countryList}>
+                {availableCountries.map((country) => (
                   <TouchableOpacity
-                    style={styles.closeButton}
-                    onPress={() => setCountryModalVisible(false)}
+                    key={country}
+                    style={[
+                      styles.countryListItem,
+                      country === filters.selectedCountry && styles.selectedCountryItem
+                    ]}
+                    onPress={() => handleCountrySelect(country)}
                   >
-                    <ThemedText style={styles.closeButtonText}>✕</ThemedText>
+                    <View style={styles.countryItemContent}>
+                      <ThemedText style={[
+                        styles.countryItemText,
+                        country === filters.selectedCountry && styles.selectedCountryText
+                      ]}>
+                        {countryFlags[country] || '🌍'} {country}
+                      </ThemedText>
+                    </View>
                   </TouchableOpacity>
-                </View>
-
-                <ScrollView style={styles.countryList}>
-                  {availableCountries.map((country) => (
-                    <TouchableOpacity
-                      key={country}
-                      style={[
-                        styles.countryListItem,
-                        country === filters.selectedCountry && styles.selectedCountryItem
-                      ]}
-                      onPress={() => handleCountrySelect(country)}
-                    >
-                      <View style={styles.countryItemContent}>
-                        <ThemedText style={[
-                          styles.countryItemText,
-                          country === filters.selectedCountry && styles.selectedCountryText
-                        ]}>
-                          {countryFlags[country] || '🌍'} {country}
-                        </ThemedText>
-                      </View>
-                    </TouchableOpacity>
-                  ))}
-                </ScrollView>
-              </ThemedView>
-            </View>
-          </Modal>
+                ))}
+              </ScrollView>
+            </ThemedView>
+          </View>
+        </Modal>
         </>
       ) : (
         // Show login form when not authenticated
@@ -383,7 +431,7 @@ export default function ProfileScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    padding: 16,
+    padding: 8,
   },
   header: {
     marginTop: 40,
@@ -391,30 +439,30 @@ const styles = StyleSheet.create({
   },
   // User Profile Styles
   profileInfo: {
-    padding: 16,
+    padding: 12,
     borderRadius: 12,
-    marginBottom: 20,
+    marginBottom: 16,
     alignItems: 'center',
   },
   userAvatarContainer: {
-    marginBottom: 16,
+    marginBottom: 12,
   },
   userName: {
-    fontSize: 24,
-    marginBottom: 8,
+    fontSize: 20,
+    marginBottom: 4,
   },
   userEmail: {
-    fontSize: 16,
+    fontSize: 14,
     opacity: 0.7,
-    marginBottom: 20,
+    marginBottom: 16,
   },
   signOutButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
     borderRadius: 8,
-    gap: 8,
+    gap: 6,
   },
   signOutText: {
     color: 'white',
@@ -425,11 +473,13 @@ const styles = StyleSheet.create({
   keyboardView: {
     flex: 1,
   },
+  scrollViewContainer: {
+    flex: 1,
+  },
   scrollContent: {
     flexGrow: 1,
-    justifyContent: 'center',
-    paddingHorizontal: 24,
-    paddingVertical: 20,
+    paddingHorizontal: 8,
+    paddingVertical: 8,
   },
   loginHeader: {
     alignItems: 'center',
@@ -493,10 +543,19 @@ const styles = StyleSheet.create({
   section: {
     padding: 16,
     borderRadius: 12,
-    marginBottom: 16,
+    marginBottom: 12,
+    backgroundColor: 'rgba(255, 255, 255, 1)',
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 1,
+    },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 1,
   },
   sectionTitle: {
-    fontSize: 18,
+    fontSize: 16,
     marginBottom: 8,
   },
   sectionDescription: {
@@ -594,11 +653,11 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   menuItem: {
-    paddingVertical: 16,
+    paddingVertical: 14,
     paddingHorizontal: 16,
     borderRadius: 12,
     backgroundColor: 'rgba(0, 0, 0, 0.02)',
-    marginBottom: 8,
+    marginBottom: 6,
   },
   menuItemContent: {
     flexDirection: 'row',

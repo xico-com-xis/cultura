@@ -119,6 +119,7 @@ type EventsContextType = {
   events: Event[];
   setEvents: React.Dispatch<React.SetStateAction<Event[]>>;
   addEvent: (event: Omit<Event, 'id'>) => Promise<Event>;
+  deleteEvent: (eventId: string) => Promise<void>;
   filters: FilterState;
   setSelectedTypes: (types: Array<EventType | 'all'>) => void;
   setMapFilterEnabled: (enabled: boolean) => void;
@@ -1431,6 +1432,57 @@ export const EventProvider: React.FC<{children: React.ReactNode}> = ({ children 
     }
   };
 
+  const deleteEvent = async (eventId: string) => {
+    if (!user) {
+      throw new Error('User must be logged in to delete events');
+    }
+
+    try {
+      const { data: { user: currentUser }, error: userError } = await supabase.auth.getUser();
+      
+      if (userError || !currentUser) {
+        console.error('User authentication issue:', userError);
+        throw new Error('Authentication failed. Please sign in again.');
+      }
+
+      // First verify that the current user owns this event
+      const { data: eventData, error: eventCheckError } = await supabase
+        .from('events')
+        .select('created_by')
+        .eq('id', eventId)
+        .single();
+
+      if (eventCheckError) {
+        console.error('Error checking event ownership:', eventCheckError);
+        throw new Error('Event not found');
+      }
+
+      if (eventData.created_by !== currentUser.id) {
+        throw new Error('You can only delete your own events');
+      }
+
+      // Delete the event (cascade will handle schedules, tickets, etc.)
+      const { error: deleteError } = await supabase
+        .from('events')
+        .delete()
+        .eq('id', eventId);
+
+      if (deleteError) {
+        console.error('Failed to delete event:', deleteError);
+        throw new Error(`Failed to delete event: ${deleteError.message || 'Unknown database error'}`);
+      }
+
+      // Remove from local state immediately for instant UI update
+      setEvents(prevEvents => prevEvents.filter(event => event.id !== eventId));
+
+      console.log('Event deleted successfully:', eventId);
+
+    } catch (error) {
+      console.error('Error deleting event:', error);
+      throw error;
+    }
+  };
+
   // Calculate available cities based on selected country
   const availableCities = useMemo(() => {
     return COUNTRY_CITIES[filters.selectedCountry] || [];
@@ -1503,7 +1555,8 @@ export const EventProvider: React.FC<{children: React.ReactNode}> = ({ children 
     <EventsContext.Provider value={{ 
       events, 
       setEvents,
-      addEvent, 
+      addEvent,
+      deleteEvent, 
       filters,
       setSelectedTypes,
       setMapFilterEnabled,
