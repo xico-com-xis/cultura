@@ -1,6 +1,6 @@
 import { format } from 'date-fns';
 import { router, useLocalSearchParams } from 'expo-router';
-import { Alert, Image, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
+import { Alert, Image, Linking, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
 
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
@@ -58,9 +58,30 @@ export default function EventDetailScreen() {
     }
   };
 
+  // Format recurring event display
+  const formatRecurringEvent = (schedule: { date: string; endDate?: string }[]) => {
+    if (schedule.length <= 1) {
+      return formatDate(schedule[0].date);
+    }
+
+    // Get start and end dates
+    const dates = schedule.map(s => new Date(s.date)).sort((a, b) => a.getTime() - b.getTime());
+    const startDate = dates[0];
+    const endDate = dates[dates.length - 1];
+
+    // Get unique days of the week and sort them
+    const dayNumbers = [...new Set(dates.map(date => date.getDay()))].sort();
+    const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+    const daysText = dayNumbers.map(dayNum => dayNames[dayNum]).join(', ');
+
+    // Format time from first occurrence
+    const timeText = format(startDate, 'h:mm a');
+
+    return `${format(startDate, 'MMMM d')} - ${format(endDate, 'MMMM d, yyyy')}\n${daysText}s at ${timeText}`;
+  };
+
   const navigateToMap = () => {
     if (event.coordinates) {
-      console.log('Event Detail - Navigating to map with coordinates:', event.coordinates);
       router.push({
         pathname: '/(tabs)/map',
         params: { 
@@ -70,22 +91,17 @@ export default function EventDetailScreen() {
           eventTitle: event.title
         }
       });
-    } else {
-      console.log('Event Detail - No coordinates available for event:', event.id);
     }
   };
 
   const navigateToOrganizer = () => {
     if (event.organizer.id) {
-      console.log('Event Detail - Navigating to organizer page:', event.organizer.id);
       router.push({
         pathname: '/organizer/[id]',
         params: { 
           id: event.organizer.id
         }
       });
-    } else {
-      console.log('Event Detail - No organizer ID available for event:', event.id);
     }
   };
 
@@ -110,7 +126,85 @@ export default function EventDetailScreen() {
       }
     } catch (error) {
       Alert.alert('Error', 'Failed to update favorite status');
-      console.error('Favorite toggle error:', error);
+    }
+  };
+
+  const addToCalendar = async () => {
+    try {
+      // Get the first occurrence date for single events or the start date for recurring events
+      const firstDate = new Date(event.schedule[0].date);
+      const endDate = event.schedule[0].endDate ? new Date(event.schedule[0].endDate) : new Date(firstDate.getTime() + 60 * 60 * 1000); // Default 1 hour duration
+      
+      // Format dates for calendar URL
+      const formatCalendarDate = (date: Date) => {
+        return date.toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z';
+      };
+
+      const startTime = formatCalendarDate(firstDate);
+      const endTime = formatCalendarDate(endDate);
+      
+      // Encode event details for URLs
+      const title = encodeURIComponent(event.title);
+      const description = encodeURIComponent(`${event.description}\n\nOrganized by: ${event.organizer.name}`);
+      const location = encodeURIComponent(getLocationDisplay());
+      
+      let calendarOpened = false;
+
+      // For iOS, go directly to Google Calendar web version which works reliably
+      const googleCalendarUrl = `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${title}&dates=${startTime}/${endTime}&details=${description}&location=${location}`;
+      
+      const supported = await Linking.canOpenURL(googleCalendarUrl);
+      
+      if (supported) {
+        await Linking.openURL(googleCalendarUrl);
+        calendarOpened = true;
+      }
+
+      // Try Android Calendar app with pre-filled details
+      if (!calendarOpened) {
+        try {
+          const androidCalendarUrl = `content://com.android.calendar/time/${firstDate.getTime()}?title=${title}&description=${description}&eventLocation=${location}&beginTime=${firstDate.getTime()}&endTime=${endDate.getTime()}`;
+          const androidSupported = await Linking.canOpenURL(androidCalendarUrl);
+          
+          if (androidSupported) {
+            await Linking.openURL(androidCalendarUrl);
+            calendarOpened = true;
+          }
+        } catch (error) {
+          console.log('Android calendar failed:', error);
+        }
+      }
+
+      // Try Outlook mobile with pre-filled details
+      if (!calendarOpened) {
+        try {
+          const outlookUrl = `ms-outlook://calendar/newevent?subject=${title}&startdt=${startTime}&enddt=${endTime}&location=${location}&body=${description}`;
+          const outlookSupported = await Linking.canOpenURL(outlookUrl);
+          
+          if (outlookSupported) {
+            await Linking.openURL(outlookUrl);
+            calendarOpened = true;
+          }
+        } catch (error) {
+          console.log('Outlook failed:', error);
+        }
+      }
+
+      // Final fallback - show manual instructions
+      if (!calendarOpened) {
+        Alert.alert(
+          'Add to Calendar',
+          'Unable to open calendar app. Please add the event manually:\n\n' +
+          `Title: ${event.title}\n` +
+          `Date: ${format(firstDate, 'EEEE, MMMM d, yyyy • h:mm a')}\n` +
+          `Location: ${getLocationDisplay()}\n` +
+          `Description: ${event.description}`,
+          [{ text: 'OK' }]
+        );
+      }
+    } catch (error) {
+      console.error('Calendar error:', error);
+      Alert.alert('Error', 'Unable to add event to calendar');
     }
   };
   
@@ -159,20 +253,6 @@ export default function EventDetailScreen() {
         <View style={styles.content}>
           <ThemedText type="title" style={styles.title}>{event.title}</ThemedText>
           
-          <ThemedText style={styles.type}>
-            {eventTypeIcons[event.type]} {event.type}
-          </ThemedText>
-          
-          <ThemedView style={styles.section}>
-            <IconSymbol name="calendar" size={20} color="#808080" />
-            {event.schedule.map((schedule, index) => (
-              <ThemedText key={index} style={styles.scheduleItem}>
-                {formatDate(schedule.date)}
-                {schedule.endDate && ` - ${format(new Date(schedule.endDate), 'h:mm a')}`}
-              </ThemedText>
-            ))}
-          </ThemedView>
-          
           <ThemedView style={styles.section}>
             <IconSymbol name="mappin" size={20} color="#808080" />
             <TouchableOpacity onPress={navigateToMap} disabled={!event.coordinates}>
@@ -188,9 +268,25 @@ export default function EventDetailScreen() {
           </ThemedView>
           
           <ThemedView style={styles.section}>
-            <ThemedText style={styles.sectionTitle}>About</ThemedText>
-            <ThemedText style={styles.description}>{event.description}</ThemedText>
+            <View style={styles.calendarHeader}>
+              <TouchableOpacity style={styles.calendarIconButton} onPress={addToCalendar}>
+                <IconSymbol name="calendar" size={20} color="#4C8BF5" />
+              </TouchableOpacity>
+              {event.schedule.length > 1 && (
+                <View style={styles.recurringBadge}>
+                  <IconSymbol name="repeat" size={12} color="#4C8BF5" />
+                  <ThemedText style={styles.recurringText}>Recurring</ThemedText>
+                </View>
+              )}
+            </View>
+            <ThemedText style={styles.scheduleItem}>
+              {formatRecurringEvent(event.schedule)}
+            </ThemedText>
           </ThemedView>
+
+          <ThemedText style={styles.type}>
+            {eventTypeIcons[event.type]} {event.type}
+          </ThemedText>
           
           <ThemedView style={styles.section}>
             <ThemedText style={styles.sectionTitle}>Organizer</ThemedText>
@@ -201,6 +297,11 @@ export default function EventDetailScreen() {
                 {event.organizer.name}
               </ThemedText>
             </TouchableOpacity>
+          </ThemedView>
+          
+          <ThemedView style={styles.section}>
+            <ThemedText style={styles.sectionTitle}>About</ThemedText>
+            <ThemedText style={styles.description}>{event.description}</ThemedText>
           </ThemedView>
           
           {event.professionals && event.professionals.length > 0 && (
@@ -398,5 +499,29 @@ const styles = StyleSheet.create({
   favoriteButtonActive: {
     backgroundColor: '#4C8BF5',
     borderColor: '#4C8BF5',
+  },
+  recurringBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F0F5FF',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    marginLeft: 8,
+  },
+  recurringText: {
+    fontSize: 11,
+    color: '#4C8BF5',
+    fontWeight: '500',
+    marginLeft: 3,
+  },
+  calendarHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  calendarIconButton: {
+    padding: 4,
+    marginRight: 8,
+    borderRadius: 6,
   },
 });

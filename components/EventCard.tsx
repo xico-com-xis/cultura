@@ -20,15 +20,35 @@ export default function EventCard({ event }: EventCardProps) {
   const formatDate = (dateStr: string) => {
     try {
       const date = new Date(dateStr);
-      return format(date, 'MMM d, yyyy • h:mm a');
+      return `${format(date, 'MMM d, yyyy')}\n${format(date, 'h:mm a')}`;
     } catch (error) {
       return dateStr;
     }
   };
+
+  // Format recurring event display
+  const formatRecurringEvent = (schedule: { date: string; endDate?: string }[]) => {
+    if (schedule.length <= 1) {
+      return formatDate(schedule[0].date);
+    }
+
+    // Get start and end dates
+    const dates = schedule.map(s => new Date(s.date)).sort((a, b) => a.getTime() - b.getTime());
+    const startDate = dates[0];
+    const endDate = dates[dates.length - 1];
+
+    // Get unique days of the week and sort them
+    const dayNumbers = [...new Set(dates.map(date => date.getDay()))].sort();
+    const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    const daysText = dayNumbers.map(dayNum => dayNames[dayNum]).join(', ');
+
+    // Format time from first occurrence
+    const timeText = format(startDate, 'h:mm a');
+
+    return `${format(startDate, 'MMM d')} - ${format(endDate, 'MMM d, yyyy')}\n${daysText} at ${timeText}`;
+  };
   
   const navigateToEventDetails = () => {
-    console.log('EventCard - Navigating to event detail with ID:', event.id, 'Type:', typeof event.id);
-    console.log('EventCard - Event title:', event.title);
     router.push({
       pathname: '/event/[id]',
       params: { id: event.id }
@@ -63,9 +83,9 @@ export default function EventCard({ event }: EventCardProps) {
         
         <ThemedText type="title" style={styles.title} numberOfLines={2}>{event.title}</ThemedText>
         
-        <ThemedText style={styles.date} numberOfLines={1}>
+        <ThemedText style={styles.date} numberOfLines={2}>
           {event.schedule && event.schedule.length > 0 
-            ? formatDate(event.schedule[0].date)
+            ? formatRecurringEvent(event.schedule)
             : 'Date TBA'}
         </ThemedText>
       </View>
