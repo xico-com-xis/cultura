@@ -129,6 +129,53 @@ export default function EventDetailScreen() {
     }
   };
 
+  // Navigation functions for next/previous events (only future events)
+  const navigateToNextEvent = () => {
+    // Filter to only future events (events that haven't started yet)
+    const now = new Date();
+    const futureEvents = events.filter(event => {
+      const eventDate = new Date(event.schedule[0].date);
+      return eventDate > now;
+    });
+    
+    const currentIndex = futureEvents.findIndex(e => String(e.id) === eventId);
+    if (currentIndex !== -1 && currentIndex < futureEvents.length - 1) {
+      const nextEvent = futureEvents[currentIndex + 1];
+      router.replace({
+        pathname: '/event/[id]',
+        params: { id: nextEvent.id }
+      });
+    }
+  };
+
+  const navigateToPreviousEvent = () => {
+    // Filter to only future events (events that haven't started yet)
+    const now = new Date();
+    const futureEvents = events.filter(event => {
+      const eventDate = new Date(event.schedule[0].date);
+      return eventDate > now;
+    });
+    
+    const currentIndex = futureEvents.findIndex(e => String(e.id) === eventId);
+    if (currentIndex > 0) {
+      const previousEvent = futureEvents[currentIndex - 1];
+      router.replace({
+        pathname: '/event/[id]',
+        params: { id: previousEvent.id }
+      });
+    }
+  };
+
+  // Check if navigation is possible (only among future events)
+  const now = new Date();
+  const futureEvents = events.filter(event => {
+    const eventDate = new Date(event.schedule[0].date);
+    return eventDate > now;
+  });
+  const currentIndex = futureEvents.findIndex(e => String(e.id) === eventId);
+  const canNavigateNext = currentIndex !== -1 && currentIndex < futureEvents.length - 1;
+  const canNavigatePrevious = currentIndex > 0;
+
   const addToCalendar = async () => {
     try {
       // Get the first occurrence date for single events or the start date for recurring events
@@ -219,22 +266,38 @@ export default function EventDetailScreen() {
           <IconSymbol name="chevron.left" size={24} color="#007AFF" />
         </TouchableOpacity>
         <ThemedText style={styles.headerTitle}>Event Details</ThemedText>
-        {user && (
-          <TouchableOpacity 
-            style={[
-              styles.favoriteButton, 
-              isEventFavorited(eventId) && styles.favoriteButtonActive
-            ]}
-            onPress={handleFavoriteToggle}
-          >
-            <IconSymbol 
-              name={isEventFavorited(eventId) ? "heart.fill" : "heart"} 
-              size={20} 
-              color={isEventFavorited(eventId) ? "#fff" : "#4C8BF5"} 
-            />
-          </TouchableOpacity>
-        )}
-        {!user && <View style={styles.headerSpacer} />}
+        <View style={styles.headerRightSection}>
+          <View style={styles.navigationButtons}>
+            <TouchableOpacity 
+              style={[
+                styles.navigationButton,
+                !canNavigatePrevious && styles.navigationButtonDisabled
+              ]}
+              onPress={navigateToPreviousEvent}
+              disabled={!canNavigatePrevious}
+            >
+              <IconSymbol 
+                name="chevron.left" 
+                size={18} 
+                color={canNavigatePrevious ? "#007AFF" : "#C7C7CC"} 
+              />
+            </TouchableOpacity>
+            <TouchableOpacity 
+              style={[
+                styles.navigationButton,
+                !canNavigateNext && styles.navigationButtonDisabled
+              ]}
+              onPress={navigateToNextEvent}
+              disabled={!canNavigateNext}
+            >
+              <IconSymbol 
+                name="chevron.right" 
+                size={18} 
+                color={canNavigateNext ? "#007AFF" : "#C7C7CC"} 
+              />
+            </TouchableOpacity>
+          </View>
+        </View>
       </ThemedView>
 
       <ScrollView style={styles.scrollView}>        
@@ -251,7 +314,25 @@ export default function EventDetailScreen() {
         )}
         
         <View style={styles.content}>
-          <ThemedText type="title" style={styles.title}>{event.title}</ThemedText>
+          <View style={styles.titleSection}>
+            <ThemedText type="title" style={styles.title}>{event.title}</ThemedText>
+            {user && (
+              <TouchableOpacity 
+                style={[
+                  styles.followButton, 
+                  isEventFavorited(eventId) && styles.followButtonActive
+                ]}
+                onPress={handleFavoriteToggle}
+              >
+                <ThemedText style={[
+                  styles.followButtonText,
+                  isEventFavorited(eventId) && styles.followButtonTextActive
+                ]}>
+                  {isEventFavorited(eventId) ? 'Following' : 'Follow'}
+                </ThemedText>
+              </TouchableOpacity>
+            )}
+          </View>
           
           <ThemedView style={styles.section}>
             <IconSymbol name="mappin" size={20} color="#808080" />
@@ -417,6 +498,12 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 24,
     marginBottom: 8,
+    flex: 1,
+  },
+  titleSection: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
   },
   type: {
     fontSize: 16,
@@ -500,6 +587,27 @@ const styles = StyleSheet.create({
     backgroundColor: '#4C8BF5',
     borderColor: '#4C8BF5',
   },
+  followButton: {
+    backgroundColor: 'transparent',
+    borderWidth: 1,
+    borderColor: '#4C8BF5',
+    borderRadius: 20,
+    paddingHorizontal: 16,
+    paddingVertical: 6,
+    marginLeft: 12,
+  },
+  followButtonActive: {
+    backgroundColor: '#4C8BF5',
+    borderColor: '#4C8BF5',
+  },
+  followButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#4C8BF5',
+  },
+  followButtonTextActive: {
+    color: '#FFFFFF',
+  },
   recurringBadge: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -523,5 +631,25 @@ const styles = StyleSheet.create({
     padding: 4,
     marginRight: 8,
     borderRadius: 6,
+  },
+  headerRightSection: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  navigationButtons: {
+    flexDirection: 'row',
+    marginLeft: 8,
+  },
+  navigationButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginLeft: 4,
+    backgroundColor: '#F2F2F7',
+  },
+  navigationButtonDisabled: {
+    backgroundColor: '#F9F9F9',
   },
 });
