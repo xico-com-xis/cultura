@@ -24,9 +24,11 @@ export default function EventsScreen() {
     setSelectedCity,
     setPolygonCoords,
     setShouldNavigateToMap,
+    setShowFollowingOnly,
     availableCities,
     refreshEvents,
-    loading
+    loading,
+    favoriteState
   } = useEvents();
   const { user } = useAuth();
   const colorScheme = useColorScheme();
@@ -38,6 +40,7 @@ export default function EventsScreen() {
   // Add temporary state variables for the modal
   const [tempSelectedTypes, setTempSelectedTypes] = useState<Array<EventType | 'all'>>(['all']);
   const [tempSelectedCity, setTempSelectedCity] = useState<string>('all');
+  const [tempShowFollowingOnly, setTempShowFollowingOnly] = useState(false);
 
   const [mapModalVisible, setMapModalVisible] = useState(false);
 
@@ -49,12 +52,14 @@ export default function EventsScreen() {
   // Update temporary filter states when modal opens
   const openFilterModal = () => {
     setTempSelectedTypes([...filters.selectedTypes]);
+    setTempShowFollowingOnly(filters.showFollowingOnly || false);
     setFilterModalVisible(true);
   };
   
   // Apply filters and close modal
   const applyFilters = () => {
     setSelectedTypes([...tempSelectedTypes]);
+    setShowFollowingOnly(tempShowFollowingOnly);
     setFilterModalVisible(false);
   };
 
@@ -289,6 +294,29 @@ export default function EventsScreen() {
                 </TouchableOpacity>
               ))}
             </View>
+            
+            {/* People I Follow Section */}
+            <ThemedText style={styles.filterSectionTitle}>People I Follow</ThemedText>
+            <TouchableOpacity 
+              style={[
+                styles.filterOption,
+                styles.followingFilterOption,
+                tempShowFollowingOnly && {
+                  backgroundColor: Colors[colorScheme ?? 'light'].tint,
+                  borderColor: Colors[colorScheme ?? 'light'].tint,
+                }
+              ]}
+              onPress={() => setTempShowFollowingOnly(!tempShowFollowingOnly)}
+            >
+              <ThemedText 
+                style={[
+                  styles.filterOptionText, 
+                  tempShowFollowingOnly && { color: '#fff' }
+                ]}
+              >
+                👥 Show only events from people I follow
+              </ThemedText>
+            </TouchableOpacity>
             
             {/* Apply Button */}
             <TouchableOpacity 
@@ -602,6 +630,10 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(0, 0, 0, 0.1)',
     margin: 4,
+  },
+  followingFilterOption: {
+    width: '100%',
+    marginBottom: 12,
   },
   filterOptionText: {
     fontSize: 14,

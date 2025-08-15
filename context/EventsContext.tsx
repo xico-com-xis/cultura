@@ -1,4 +1,5 @@
 import { supabase } from '@/lib/supabase';
+import * as Notifications from 'expo-notifications';
 import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
 import { useAuth } from './AuthContext';
 
@@ -102,6 +103,7 @@ type FilterState = {
   savedPolygons: Array<Array<{ latitude: number; longitude: number }>>;
   shouldNavigateToMap: boolean;
   selectedCountry: string;
+  showFollowingOnly: boolean;
 };
 
 // Define notification types
@@ -129,6 +131,7 @@ type EventsContextType = {
   setSavedPolygons: (polygons: Array<Array<{ latitude: number; longitude: number }>>) => void;
   setShouldNavigateToMap: (should: boolean) => void;
   setSelectedCountry: (country: string) => void;
+  setShowFollowingOnly: (enabled: boolean) => void;
   filteredEvents: Event[];
   hasActiveTypeFilters: boolean;
   availableCities: string[];
@@ -751,6 +754,7 @@ export const EventProvider: React.FC<{children: React.ReactNode}> = ({ children 
     savedPolygons: [],
     shouldNavigateToMap: false,
     selectedCountry: 'Portugal', // Default country
+    showFollowingOnly: false,
   });
 
   // Favorite/notification state
@@ -1002,6 +1006,10 @@ export const EventProvider: React.FC<{children: React.ReactNode}> = ({ children 
     setFilters(prev => ({ ...prev, selectedCountry: country, selectedCity: 'all' })); // Reset city when country changes
   };
 
+  const setShowFollowingOnly = (enabled: boolean) => {
+    setFilters(prev => ({ ...prev, showFollowingOnly: enabled }));
+  };
+
   // Load favorite/notification data on user login
   useEffect(() => {
     if (user) {
@@ -1091,6 +1099,163 @@ export const EventProvider: React.FC<{children: React.ReactNode}> = ({ children 
     }
   };
 
+  // Notification scheduling functions
+  const scheduleEventNotifications = async (eventId: string) => {
+    if (!user) return;
+
+    const event = events.find(e => e.id === eventId);
+    if (!event || !event.schedule || event.schedule.length === 0) return;
+
+    try {
+      // Check notification permissions first
+      const { status } = await Notifications.getPermissionsAsync();
+      if (status !== 'granted') return;
+
+      // Schedule reminder notifications (30 minutes before event)
+      if (isGlobalNotificationEnabled('reminders')) {
+        for (const schedule of event.schedule) {
+          const eventDate = new Date(schedule.date);
+          const reminderDate = new Date(eventDate.getTime() - 30 * 60 * 1000); // 30 minutes before
+          const now = new Date();
+          
+          console.log(`Event "${event.title}":`);
+          console.log(`  Event date: ${eventDate.toISOString()}`);
+          console.log(`  Reminder date: ${reminderDate.toISOString()}`);
+          console.log(`  Current time: ${now.toISOString()}`);
+          console.log(`  Is reminder in future: ${reminderDate > now}`);
+          
+          // Only schedule if the reminder time is in the future
+          if (reminderDate > now) {
+            const secondsUntilReminder = Math.floor((reminderDate.getTime() - now.getTime()) / 1000);
+            
+            // Double check that we have a positive number of seconds
+            if (secondsUntilReminder > 0) {
+              console.log(`Attempting to schedule reminder for "${event.title}" in ${Math.floor(secondsUntilReminder / 3600)} hours and ${Math.floor((secondsUntilReminder % 3600) / 60)} minutes (${secondsUntilReminder} seconds)`);
+              console.log(`Reminder date: ${reminderDate.toISOString()}`);
+              console.log(`Days until reminder: ${Math.floor(secondsUntilReminder / (24 * 3600))}`);
+              
+              // Check if the date is too far in the future (iOS has limits)
+              const maxFutureDays = 64; // iOS notification limit is typically 64 days
+              if (secondsUntilReminder > maxFutureDays * 24 * 3600) {
+                console.log(`Event is too far in the future (${Math.floor(secondsUntilReminder / (24 * 3600))} days). iOS limit is typically 64 days.`);
+                console.log('Skipping notification - event is beyond iOS scheduling limit');
+                return;
+              }
+              
+              try {
+                // Try to use the proper trigger format - schedule for specific time
+                const result = await Notifications.scheduleNotificationAsync({
+                  identifier: `reminder-${eventId}-${schedule.date}`,
+                  content: {
+                    title: '📅 Event Reminder',
+                    body: `${event.title} starts in 30 minutes at ${event.location}`,
+                    data: { 
+                      eventId: event.id,
+                      type: 'reminder',
+                      eventTitle: event.title,
+                      eventLocation: event.location
+                    },
+                  },
+                  trigger: { 
+                    type: 'date', 
+                    date: reminderDate 
+                  } as any, // Cast to bypass TypeScript definition issues
+                });
+                
+                console.log('Notification scheduled successfully with ID:', result);
+              } catch (triggerError) {
+                console.error('Error scheduling notification with date trigger:', triggerError);
+                
+                // Fallback: don't schedule the notification rather than risk immediate delivery
+                console.log('Skipping notification to avoid immediate delivery');
+              }
+            } else {
+              console.log(`Skipping reminder for "${event.title}" - reminder time has passed (${secondsUntilReminder} seconds)`);
+            }
+          } else {
+            console.log(`Skipping reminder for "${event.title}" - event is too soon or has passed`);
+          }
+        }
+      }
+
+      console.log('Scheduled notifications for event:', event.title);
+      // Log all scheduled notifications for debugging
+      await logScheduledNotifications();
+    } catch (error) {
+      console.error('Error scheduling event notifications:', error);
+    }
+  };
+
+  const cancelEventNotifications = async (eventId: string) => {
+    try {
+      // Get all scheduled notifications
+      const notifications = await Notifications.getAllScheduledNotificationsAsync();
+      
+      // Cancel notifications related to this event
+      const eventNotifications = notifications.filter(notification => 
+        notification.content.data?.eventId === eventId
+      );
+
+      for (const notification of eventNotifications) {
+        await Notifications.cancelScheduledNotificationAsync(notification.identifier);
+      }
+
+      console.log('Cancelled notifications for event:', eventId);
+    } catch (error) {
+      console.error('Error cancelling event notifications:', error);
+    }
+  };
+
+  const rescheduleAllEventNotifications = async () => {
+    if (!user) return;
+
+    try {
+      // Cancel all existing event notifications
+      const notifications = await Notifications.getAllScheduledNotificationsAsync();
+      const eventNotifications = notifications.filter(notification => 
+        notification.content.data?.type === 'reminder'
+      );
+
+      for (const notification of eventNotifications) {
+        await Notifications.cancelScheduledNotificationAsync(notification.identifier);
+      }
+
+      // Reschedule for all favorited events
+      const favoriteEventIds = Array.from(favoriteState.favoriteEvents);
+      for (const eventId of favoriteEventIds) {
+        await scheduleEventNotifications(eventId);
+      }
+
+      console.log('Rescheduled all event notifications');
+    } catch (error) {
+      console.error('Error rescheduling notifications:', error);
+    }
+  };
+
+  // Debug function to log all scheduled notifications
+  const logScheduledNotifications = async () => {
+    try {
+      const notifications = await Notifications.getAllScheduledNotificationsAsync();
+      console.log('=== SCHEDULED NOTIFICATIONS ===');
+      console.log(`Total scheduled: ${notifications.length}`);
+      
+      notifications.forEach((notification, index) => {
+        const eventId = notification.content.data?.eventId;
+        const eventTitle = notification.content.data?.eventTitle;
+        const trigger = notification.trigger;
+        
+        if (trigger && 'seconds' in trigger && trigger.seconds) {
+          const hoursUntil = Math.floor(trigger.seconds / 3600);
+          const minutesUntil = Math.floor((trigger.seconds % 3600) / 60);
+          console.log(`${index + 1}. "${eventTitle}" (ID: ${eventId}) - in ${hoursUntil}h ${minutesUntil}m`);
+        }
+      });
+      console.log('==============================');
+    } catch (error) {
+      console.error('Error logging scheduled notifications:', error);
+    }
+  };
+
   // Event favorite functions
   const favoriteEvent = async (eventId: string) => {
     if (!user) {
@@ -1111,6 +1276,9 @@ export const EventProvider: React.FC<{children: React.ReactNode}> = ({ children 
         ...prev,
         favoriteEvents: new Set([...prev.favoriteEvents, eventId]),
       }));
+
+      // Schedule notifications for this event if user has notification settings enabled
+      await scheduleEventNotifications(eventId);
     } catch (error) {
       console.error('Error favoriting event:', error);
       throw error;
@@ -1140,6 +1308,9 @@ export const EventProvider: React.FC<{children: React.ReactNode}> = ({ children 
         ...prev,
         favoriteEvents: newFavorites,
       }));
+
+      // Cancel notifications for this event
+      await cancelEventNotifications(eventId);
     } catch (error) {
       console.error('Error unfavoriting event:', error);
       throw error;
@@ -1236,6 +1407,11 @@ export const EventProvider: React.FC<{children: React.ReactNode}> = ({ children 
           ...prev,
           globalNotificationSettings: new Set([...prev.globalNotificationSettings, notificationType]),
         }));
+
+        // Reschedule notifications for all favorited events
+        if (notificationType === 'reminders') {
+          await rescheduleAllEventNotifications();
+        }
       } else {
         // Disable notification
         const { error } = await supabase
@@ -1255,6 +1431,11 @@ export const EventProvider: React.FC<{children: React.ReactNode}> = ({ children 
           ...prev,
           globalNotificationSettings: newSettings,
         }));
+
+        // Cancel reminder notifications if reminders are disabled
+        if (notificationType === 'reminders') {
+          await rescheduleAllEventNotifications();
+        }
       }
     } catch (error) {
       console.error('Error updating global notification setting:', error);
@@ -1540,16 +1721,21 @@ export const EventProvider: React.FC<{children: React.ReactNode}> = ({ children 
                                 filters.polygonCoords
                               ));
       
+      // Following filter: when enabled, only show events from followed organizers
+      const passesFollowingFilter = !filters.showFollowingOnly || 
+                                   favoriteState.favoritePeople.has(event.organizer.id);
+      
       // Event must pass ALL filters
-      return passesTypeFilter && passesCountryFilter && passesCityFilter && passesMapFilter;
+      return passesTypeFilter && passesCountryFilter && passesCityFilter && passesMapFilter && passesFollowingFilter;
     });
-  }, [events, filters.selectedTypes, filters.selectedCountry, filters.selectedCity, filters.mapFilterEnabled, filters.polygonCoords]);
+  }, [events, filters.selectedTypes, filters.selectedCountry, filters.selectedCity, filters.mapFilterEnabled, filters.polygonCoords, filters.showFollowingOnly, favoriteState.favoritePeople]);
 
   const hasActiveTypeFilters = useMemo(() => {
     return !(filters.selectedTypes.length === 1 && filters.selectedTypes.includes('all')) ||
            filters.selectedCity !== 'all' ||
-           filters.mapFilterEnabled;
-  }, [filters.selectedTypes, filters.selectedCity, filters.mapFilterEnabled]);
+           filters.mapFilterEnabled ||
+           filters.showFollowingOnly;
+  }, [filters.selectedTypes, filters.selectedCity, filters.mapFilterEnabled, filters.showFollowingOnly]);
 
   return (
     <EventsContext.Provider value={{ 
@@ -1566,6 +1752,7 @@ export const EventProvider: React.FC<{children: React.ReactNode}> = ({ children 
       setSavedPolygons,
       setShouldNavigateToMap,
       setSelectedCountry,
+      setShowFollowingOnly,
       filteredEvents,
       hasActiveTypeFilters,
       availableCities,

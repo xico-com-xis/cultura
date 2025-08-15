@@ -1,3 +1,4 @@
+import * as Notifications from 'expo-notifications';
 import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { Alert, Animated, FlatList, Modal, StyleSheet, TouchableOpacity, View } from 'react-native';
@@ -151,6 +152,15 @@ export default function NotificationsFavoritesScreen() {
       const currentState = isGlobalNotificationEnabled(notificationType);
       const newState = !currentState;
       
+      // If enabling notifications, check permissions first
+      if (newState) {
+        const permissionStatus = await checkAndRequestNotificationPermissions();
+        if (!permissionStatus) {
+          // User denied permissions, don't enable the toggle
+          return;
+        }
+      }
+      
       // Animate the toggle immediately for responsive feel
       animateToggle(notificationType, newState ? 1 : 0);
       
@@ -162,6 +172,68 @@ export default function NotificationsFavoritesScreen() {
       
       Alert.alert('Error', 'Failed to update notification settings');
       console.error('Notification toggle error:', error);
+    }
+  };
+
+  const checkAndRequestNotificationPermissions = async (): Promise<boolean> => {
+    try {
+      // First check current permissions
+      const { status: existingStatus } = await Notifications.getPermissionsAsync();
+      
+      if (existingStatus === 'granted') {
+        return true;
+      }
+      
+      // If not granted, request permissions
+      const { status } = await Notifications.requestPermissionsAsync({
+        ios: {
+          allowAlert: true,
+          allowBadge: true,
+          allowSound: true,
+        },
+      });
+      
+      if (status === 'granted') {
+        return true;
+      }
+      
+      // Handle different denial scenarios
+      if (status === 'denied') {
+        Alert.alert(
+          'Notifications Disabled',
+          'To receive event notifications, please enable notifications in your device settings.',
+          [
+            { text: 'Cancel', style: 'cancel' },
+            { 
+              text: 'Open Settings', 
+              onPress: () => {
+                // On iOS/Android, we can't directly open notification settings
+                // But we can show instructions
+                Alert.alert(
+                  'Enable Notifications',
+                  'Go to Settings > Notifications > Cultura and enable notifications.',
+                  [{ text: 'OK' }]
+                );
+              }
+            }
+          ]
+        );
+      } else {
+        Alert.alert(
+          'Notification Permission Required',
+          'Please allow notifications to receive event updates and reminders.',
+          [{ text: 'OK' }]
+        );
+      }
+      
+      return false;
+    } catch (error) {
+      console.error('Error requesting notification permissions:', error);
+      Alert.alert(
+        'Error',
+        'Could not request notification permissions. Please check your device settings.'
+      );
+      return false;
     }
   };
 

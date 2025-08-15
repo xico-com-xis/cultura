@@ -1,4 +1,5 @@
 import { isAfter, isBefore } from 'date-fns';
+import * as Notifications from 'expo-notifications';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 import { Alert, FlatList, StyleSheet, TouchableOpacity, View } from 'react-native';
@@ -14,7 +15,14 @@ type EventPeriod = 'future' | 'past';
 
 export default function OrganizerDetailScreen() {
   const { id } = useLocalSearchParams();
-  const { events, loading, favoritePerson, unfavoritePerson, isPersonFavorited } = useEvents();
+  const { 
+    events, 
+    loading, 
+    favoritePerson, 
+    unfavoritePerson, 
+    isPersonFavorited,
+    isGlobalNotificationEnabled 
+  } = useEvents();
   const { user } = useAuth();
   const [selectedPeriod, setSelectedPeriod] = useState<EventPeriod>('future');
   
@@ -102,11 +110,77 @@ export default function OrganizerDetailScreen() {
       if (isFavorited) {
         await unfavoritePerson(organizerId);
       } else {
+        // When favoriting an organizer, check if user has notification settings enabled
+        // and request permissions if needed
+        const hasNotificationsEnabled = isGlobalNotificationEnabled('reminders') || 
+                                       isGlobalNotificationEnabled('updates') || 
+                                       isGlobalNotificationEnabled('changes');
+        
+        if (hasNotificationsEnabled) {
+          await checkAndRequestNotificationPermissions();
+        }
+        
         await favoritePerson(organizerId);
       }
     } catch (error) {
       Alert.alert('Error', 'Failed to update favorite status');
       console.error('Favorite toggle error:', error);
+    }
+  };
+
+  const checkAndRequestNotificationPermissions = async (): Promise<boolean> => {
+    try {
+      // First check current permissions
+      const { status: existingStatus } = await Notifications.getPermissionsAsync();
+      
+      if (existingStatus === 'granted') {
+        return true;
+      }
+      
+      // If not granted, request permissions
+      const { status } = await Notifications.requestPermissionsAsync({
+        ios: {
+          allowAlert: true,
+          allowBadge: true,
+          allowSound: true,
+        },
+      });
+      
+      if (status === 'granted') {
+        return true;
+      }
+      
+      // Handle different denial scenarios
+      if (status === 'denied') {
+        Alert.alert(
+          'Notifications Disabled',
+          'You have notification settings enabled but notifications are disabled. To receive event notifications, please enable notifications in your device settings.',
+          [
+            { text: 'Cancel', style: 'cancel' },
+            { 
+              text: 'Open Settings', 
+              onPress: () => {
+                Alert.alert(
+                  'Enable Notifications',
+                  'Go to Settings > Notifications > Cultura and enable notifications.',
+                  [{ text: 'OK' }]
+                );
+              }
+            }
+          ]
+        );
+      } else {
+        Alert.alert(
+          'Notification Permission Required',
+          'You have notification settings enabled but we need permission to send notifications.',
+          [{ text: 'OK' }]
+        );
+      }
+      
+      return false;
+    } catch (error) {
+      console.error('Error requesting notification permissions:', error);
+      return false;
     }
   };
 
