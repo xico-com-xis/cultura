@@ -519,7 +519,7 @@ export default function MapScreen() {
                   <View style={styles.eventPreviewRow}>
                     <IconSymbol name="calendar" size={16} color="#666" />
                     <Text style={styles.eventPreviewText}>
-                      {selectedEvent.schedule.length > 0 
+                      {selectedEvent.schedule.length > 0 && selectedEvent.schedule[0] && selectedEvent.schedule[0].date
                         ? formatEventDate(selectedEvent.schedule[0].date)
                         : 'Date TBA'
                       }

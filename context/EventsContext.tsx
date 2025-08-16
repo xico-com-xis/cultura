@@ -84,6 +84,7 @@ export type Event = {
   description: string;
   organizer: Organizer;
   professionals?: string[]; // Cultural professionals involved
+  participants?: Organizer[]; // Tagged participants/users
   accessibility: AccessibilityFeature[];
   ticketInfo: TicketInfo;
   coordinates?: {
@@ -819,34 +820,83 @@ export const EventProvider: React.FC<{children: React.ReactNode}> = ({ children 
 
   // Transform database response to Event type (synchronous version with organizer name)
   const transformEventDataSync = (dbEvent: any, organizerName: string): Event => {
+    // Transform schedules - handle both RPC (JSONB) and manual query (joined arrays) formats
+    let schedules: EventSchedule[] = [];
+    
+    // Check if this is RPC data (JSONB fields) or manual query data (joined arrays)
+    if (dbEvent.schedules && Array.isArray(dbEvent.schedules)) {
+      // RPC format - schedules is a JSONB array
+      schedules = dbEvent.schedules.map((schedule: any) => ({
+        date: schedule.date,
+        endDate: schedule.endDate || undefined
+      }));
+    } else if (dbEvent.event_schedules && Array.isArray(dbEvent.event_schedules)) {
+      // Manual query format - event_schedules is a joined table
+      schedules = dbEvent.event_schedules.map((schedule: any) => ({
+        date: schedule.start_date,
+        endDate: schedule.end_date || undefined
+      }));
+    }
+
+    // Transform tickets - handle both formats
+    let ticketInfo: TicketInfo = { type: 'free' };
+    if (dbEvent.tickets && typeof dbEvent.tickets === 'object') {
+      // RPC format - tickets is a JSONB object
+      ticketInfo = {
+        type: dbEvent.tickets.type as 'free' | 'paid' | 'donation',
+        price: dbEvent.tickets.price || undefined,
+        currency: dbEvent.tickets.currency || undefined,
+        purchaseLink: dbEvent.tickets.purchaseLink || undefined,
+        onSiteAvailable: dbEvent.tickets.onSiteAvailable || false
+      };
+    } else if (dbEvent.event_tickets && Array.isArray(dbEvent.event_tickets) && dbEvent.event_tickets.length > 0) {
+      // Manual query format - event_tickets is a joined table
+      const ticket = dbEvent.event_tickets[0]; // Take the first ticket info
+      ticketInfo = {
+        type: ticket.type as 'free' | 'paid' | 'donation',
+        price: ticket.price || undefined,
+        currency: ticket.currency || undefined,
+        purchaseLink: ticket.purchase_link || undefined,
+        onSiteAvailable: ticket.on_site_available || false
+      };
+    }
+
+    // Transform accessibility features - handle both formats
+    let accessibility: AccessibilityFeature[] = [];
+    if (dbEvent.accessibility && Array.isArray(dbEvent.accessibility)) {
+      // RPC format - accessibility is a JSONB array
+      accessibility = dbEvent.accessibility as AccessibilityFeature[];
+    } else if (dbEvent.event_accessibility && Array.isArray(dbEvent.event_accessibility)) {
+      // Manual query format - event_accessibility is a joined table
+      accessibility = dbEvent.event_accessibility.map((acc: any) => acc.feature as AccessibilityFeature);
+    }
+
+    // Transform participants - handle both formats
+    let participants: any[] = [];
+    if (dbEvent.participants && Array.isArray(dbEvent.participants)) {
+      // RPC format - participants is a JSONB array
+      participants = dbEvent.participants;
+    }
+    // Manual query format would need a join to event_participants table
+
     return {
       id: dbEvent.id,
       title: dbEvent.title,
       type: dbEvent.type as EventType,
-      schedule: dbEvent.event_schedules?.map((schedule: any) => ({
-        date: schedule.start_date, // Correct column name
-        endDate: schedule.end_date
-      })) || [],
+      schedule: schedules,
       location: dbEvent.location,
       city: dbEvent.city,
       country: dbEvent.country,
       description: dbEvent.description || '',
-      organizer: {
+      organizer: dbEvent.organizer || {
         id: dbEvent.created_by || 'unknown',
         name: organizerName,
         profileImage: undefined
       },
       professionals: [], // We don't store this in the basic schema
-      accessibility: dbEvent.event_accessibility?.map((feature: any) => feature.feature as AccessibilityFeature) || [],
-      ticketInfo: dbEvent.event_tickets?.[0] ? {
-        type: dbEvent.event_tickets[0].type as 'free' | 'paid' | 'donation',
-        price: dbEvent.event_tickets[0].price || undefined,
-        currency: dbEvent.event_tickets[0].currency || undefined,
-        purchaseLink: dbEvent.event_tickets[0].purchase_link || undefined,
-        onSiteAvailable: dbEvent.event_tickets[0].on_site_available || false
-      } : {
-        type: 'free'
-      },
+      accessibility: accessibility,
+      ticketInfo: ticketInfo,
+      participants: participants,
       coordinates: dbEvent.coordinates_lat && dbEvent.coordinates_lng ? {
         latitude: parseFloat(dbEvent.coordinates_lat),
         longitude: parseFloat(dbEvent.coordinates_lng)
@@ -883,21 +933,34 @@ export const EventProvider: React.FC<{children: React.ReactNode}> = ({ children 
     try {
       setLoading(true);
       
-      // Test basic connection first
-      const { data: testData, error: testError } = await supabase
-        .from('events')
-        .select('*')
-        .limit(5);
-      
-      if (testError) {
-        console.error('Basic connection test failed:', testError);
-        setEvents(SAMPLE_EVENTS);
-        return;
+      // Try RPC function first
+      try {
+        const { data: rpcData, error: rpcError } = await supabase.rpc('get_events_with_details');
+        
+        if (!rpcError && rpcData && rpcData.length >= 0) {
+          console.log('RPC startup successful, got', rpcData.length, 'events');
+          
+          // Extract all unique user IDs for batch fetching
+          const userIds = [...new Set(rpcData.map((event: any) => event.created_by).filter(Boolean))] as string[];
+          const userNameMap = await fetchUserDisplayNames(userIds);
+          
+          // Transform events with the user name map
+          const transformedEvents: Event[] = rpcData.map((dbEvent: any) => {
+            const organizerName = userNameMap[dbEvent.created_by] || 'Event Organizer';
+            return transformEventDataSync(dbEvent, organizerName);
+          }).filter(Boolean);
+          
+          setEvents(currentEvents => mergeEventsSmartly(currentEvents, transformedEvents));
+          console.log('Startup load completed successfully');
+          return;
+        }
+      } catch (rpcError) {
+        console.log('RPC startup failed, trying manual query:', rpcError);
       }
 
-      console.log('Skipping RPC function, using manual query...');
+      console.log('Using fallback manual query...');
       
-      // Use manual query with proper joins
+      // Fallback to manual query with proper joins
       const { data: eventsData, error: eventsError } = await supabase
         .from('events')
         .select(`
@@ -943,7 +1006,74 @@ export const EventProvider: React.FC<{children: React.ReactNode}> = ({ children 
 
   // Refresh events (for manual refresh)
   const refreshEvents = async () => {
-    await fetchEvents();
+    try {
+      console.log('Manual refresh started...');
+      setLoading(true);
+      
+      // Try RPC function first
+      try {
+        const { data: rpcData, error: rpcError } = await supabase.rpc('get_events_with_details');
+        
+        if (!rpcError && rpcData && rpcData.length >= 0) {
+          console.log('RPC refresh successful, got', rpcData.length, 'events');
+          
+          // Extract all unique user IDs for batch fetching
+          const userIds = [...new Set(rpcData.map((event: any) => event.created_by).filter(Boolean))] as string[];
+          const userNameMap = await fetchUserDisplayNames(userIds);
+          
+          // Transform events with the user name map
+          const transformedEvents: Event[] = rpcData.map((dbEvent: any) => {
+            const organizerName = userNameMap[dbEvent.created_by] || 'Event Organizer';
+            return transformEventDataSync(dbEvent, organizerName);
+          }).filter(Boolean);
+          
+          setEvents(currentEvents => mergeEventsSmartly(currentEvents, transformedEvents));
+          console.log('Manual refresh completed successfully');
+          return;
+        }
+      } catch (rpcError) {
+        console.log('RPC refresh failed, trying manual query:', rpcError);
+      }
+      
+      // Fallback to manual query
+      const { data: eventsData, error: eventsError } = await supabase
+        .from('events')
+        .select(`
+          *,
+          event_schedules(*),
+          event_tickets(*),
+          event_accessibility(*)
+        `);
+      
+      if (eventsError) {
+        console.error('Manual query refresh failed:', eventsError);
+        throw eventsError;
+      }
+
+      if (eventsData) {
+        console.log('Manual query refresh successful, got', eventsData.length, 'events');
+        
+        // Extract all unique user IDs for batch fetching
+        const userIds = [...new Set(eventsData.map(event => event.created_by).filter(Boolean))];
+        const userNameMap = await fetchUserDisplayNames(userIds);
+        
+        // Transform events with the user name map
+        const transformedEvents = eventsData.map(dbEvent => {
+          const organizerName = userNameMap[dbEvent.created_by] || 'Event Organizer';
+          return transformEventDataSync(dbEvent, organizerName);
+        });
+        
+        setEvents(currentEvents => mergeEventsSmartly(currentEvents, transformedEvents));
+        console.log('Manual refresh completed successfully');
+      } else {
+        console.log('No events data received, keeping current events');
+      }
+    } catch (error) {
+      console.error('Error during manual refresh:', error);
+      throw error;
+    } finally {
+      setLoading(false);
+    }
   };
 
   // Load events on component mount
@@ -1114,6 +1244,7 @@ export const EventProvider: React.FC<{children: React.ReactNode}> = ({ children 
       // Schedule reminder notifications (30 minutes before event)
       if (isGlobalNotificationEnabled('reminders')) {
         for (const schedule of event.schedule) {
+          if (!schedule || !schedule.date) continue; // Skip invalid schedule entries
           const eventDate = new Date(schedule.date);
           const reminderDate = new Date(eventDate.getTime() - 30 * 60 * 1000); // 30 minutes before
           const now = new Date();
@@ -1548,6 +1679,28 @@ export const EventProvider: React.FC<{children: React.ReactNode}> = ({ children 
         }
       }
 
+      // Insert participants
+      if (eventData.participants && eventData.participants.length > 0) {
+        const participantPromises = eventData.participants.map(async (participant) => {
+          const { error } = await supabase
+            .from('event_participants')
+            .insert({
+              event_id: eventRecord.id,
+              user_id: participant.id,
+            });
+          if (error) {
+            console.error('Participant insertion error:', error);
+          }
+          return error;
+        });
+        
+        const participantResults = await Promise.all(participantPromises);
+        const participantErrors = participantResults.filter(Boolean);
+        if (participantErrors.length > 0) {
+          console.warn('Some participant insertions failed:', participantErrors);
+        }
+      }
+
       console.log('Database returned event record:', eventRecord);
       console.log('Event record ID:', eventRecord.id, 'Type:', typeof eventRecord.id);
 
@@ -1567,6 +1720,7 @@ export const EventProvider: React.FC<{children: React.ReactNode}> = ({ children 
           profileImage: undefined
         },
         professionals: eventData.professionals || [],
+        participants: eventData.participants || [], // Include participants
         accessibility: eventData.accessibility || [],
         ticketInfo: eventData.ticketInfo,
         coordinates: eventData.coordinates,
@@ -1687,6 +1841,7 @@ export const EventProvider: React.FC<{children: React.ReactNode}> = ({ children 
       
       // Check if any scheduled date is in the future
       return event.schedule.some(schedule => {
+        if (!schedule || !schedule.date) return false; // Skip invalid schedule entries
         const eventDate = new Date(schedule.date);
         return eventDate > now;
       });
@@ -1694,8 +1849,10 @@ export const EventProvider: React.FC<{children: React.ReactNode}> = ({ children 
     
     // Sort events by earliest date first (future events only)
     const sortedEvents = [...futureEvents].sort((a, b) => {
-      const aDate = a.schedule && a.schedule.length > 0 ? new Date(a.schedule[0].date) : new Date();
-      const bDate = b.schedule && b.schedule.length > 0 ? new Date(b.schedule[0].date) : new Date();
+      const aDate = a.schedule && a.schedule.length > 0 && a.schedule[0] && a.schedule[0].date 
+        ? new Date(a.schedule[0].date) : new Date();
+      const bDate = b.schedule && b.schedule.length > 0 && b.schedule[0] && b.schedule[0].date 
+        ? new Date(b.schedule[0].date) : new Date();
       return aDate.getTime() - bDate.getTime();
     });
     

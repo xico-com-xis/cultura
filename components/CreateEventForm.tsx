@@ -18,9 +18,10 @@ import LocationPicker from '@/components/LocationPicker';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
 import { IconSymbol } from '@/components/ui/IconSymbol';
+import UserSearchInput from '@/components/UserSearchInput';
 import { Colors } from '@/constants/Colors';
 import { useAuth } from '@/context/AuthContext';
-import { EventType, TicketInfo, useEvents } from '@/context/EventsContext';
+import { EventType, Organizer, TicketInfo, useEvents } from '@/context/EventsContext';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { Coordinates, createFullAddress, geocodeAddress, getCityDefaultCoordinates } from '@/utils/geocoding';
 import { uploadImageToSupabase } from '@/utils/imageUpload';
@@ -68,6 +69,7 @@ export default function CreateEventForm({ onClose, onEventCreated }: CreateEvent
   const [selectedCity, setSelectedCity] = useState(availableCities[0] || '');
   const [localImageUri, setLocalImageUri] = useState(''); // Store local image URI
   const [uploadedImageUrl, setUploadedImageUrl] = useState(''); // Store uploaded URL
+  const [selectedParticipants, setSelectedParticipants] = useState<Organizer[]>([]); // Tagged participants
   
   // Location state
   const [coordinates, setCoordinates] = useState<Coordinates | null>(null);
@@ -329,6 +331,7 @@ export default function CreateEventForm({ onClose, onEventCreated }: CreateEvent
           profileImage: undefined,
         },
         professionals: [],
+        participants: selectedParticipants, // Include tagged participants
         accessibility: [],
         ticketInfo,
         coordinates: eventCoordinates || undefined, // Convert null to undefined for type compatibility
@@ -499,6 +502,7 @@ export default function CreateEventForm({ onClose, onEventCreated }: CreateEvent
     setLocation('');
     setLocalImageUri('');
     setUploadedImageUrl('');
+    setSelectedParticipants([]); // Clear participants
     setCoordinates(null);
     setShowLocationInput(false);
     setTicketType('free');
@@ -584,6 +588,17 @@ export default function CreateEventForm({ onClose, onEventCreated }: CreateEvent
             multiline
             numberOfLines={4}
             maxLength={500}
+          />
+        </View>
+
+        {/* Participants Search */}
+        <View style={styles.inputContainer}>
+          <ThemedText style={styles.label}>Tag Participants</ThemedText>
+          <ThemedText style={styles.sublabel}>Search and tag other users as participants in your event</ThemedText>
+          <UserSearchInput
+            selectedUsers={selectedParticipants}
+            onUsersChange={setSelectedParticipants}
+            placeholder="Search users to tag as participants..."
           />
         </View>
 

@@ -1,6 +1,7 @@
 import { useNavigation } from '@react-navigation/native';
+import { useRouter } from 'expo-router';
 import { useState } from 'react';
-import { Alert, FlatList, Modal, RefreshControl, StyleSheet, TouchableOpacity, View } from 'react-native';
+import { Alert, FlatList, Modal, RefreshControl, StyleSheet, TextInput, TouchableOpacity, View } from 'react-native';
 
 import CreateEventForm from '@/components/CreateEventForm';
 import EventCard from '@/components/EventCard';
@@ -12,6 +13,7 @@ import { eventTypeOptions } from '@/constants/EventTypes';
 import { useAuth } from '@/context/AuthContext';
 import { EventType, useEvents } from '@/context/EventsContext';
 import { useColorScheme } from '@/hooks/useColorScheme';
+import { supabase } from '@/lib/supabase';
 
 export default function EventsScreen() {
   // Use filtered events and filter methods from context
@@ -33,9 +35,16 @@ export default function EventsScreen() {
   const { user } = useAuth();
   const colorScheme = useColorScheme();
   const navigation = useNavigation();
+  const router = useRouter();
   const [filterModalVisible, setFilterModalVisible] = useState(false);
   const [createEventModalVisible, setCreateEventModalVisible] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [searchVisible, setSearchVisible] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState<{
+    events: any[];
+    users: any[];
+  }>({ events: [], users: [] });
   
   // Add temporary state variables for the modal
   const [tempSelectedTypes, setTempSelectedTypes] = useState<Array<EventType | 'all'>>(['all']);
@@ -108,18 +117,108 @@ export default function EventsScreen() {
   const onRefresh = async () => {
     setIsRefreshing(true);
     try {
+      console.log('Starting pull-to-refresh...');
       await refreshEvents();
+      console.log('Pull-to-refresh completed successfully');
     } catch (error) {
       console.error('Error refreshing events:', error);
-      Alert.alert('Error', 'Failed to refresh events. Please try again.');
+      Alert.alert('Refresh Error', 'Failed to refresh events. Please check your connection and try again.');
     } finally {
       setIsRefreshing(false);
     }
+  };
+
+  // Search functionality
+  const performSearch = async (query: string) => {
+    if (!query.trim()) {
+      setSearchResults({ events: [], users: [] });
+      return;
+    }
+
+    const lowercaseQuery = query.toLowerCase();
+    
+    // Search events by title, description, location, and city
+    const matchingEvents = filteredEvents.filter(event => 
+      event.title.toLowerCase().includes(lowercaseQuery) ||
+      event.description.toLowerCase().includes(lowercaseQuery) ||
+      event.location.toLowerCase().includes(lowercaseQuery) ||
+      event.city.toLowerCase().includes(lowercaseQuery)
+    ).slice(0, 5); // Limit to 5 results
+
+    // Search ALL users from profiles table (not just from events)
+    let matchingUsers: any[] = [];
+    try {
+      const { data: profiles, error } = await supabase
+        .from('profiles')
+        .select('id, display_name, full_name, avatar_url')
+        .or(`display_name.ilike.%${query}%,full_name.ilike.%${query}%`)
+        .limit(5);
+
+      if (!error && profiles) {
+        matchingUsers = profiles.map(profile => ({
+          id: profile.id,
+          name: profile.display_name || profile.full_name || 'Unknown User',
+          profileImage: profile.avatar_url
+        }));
+      }
+    } catch (error) {
+      console.error('Error searching users:', error);
+      // Fallback to existing logic if database search fails
+      const allOrganizers = filteredEvents.map(event => event.organizer);
+      const uniqueOrganizers = allOrganizers.filter((organizer, index, self) => 
+        index === self.findIndex(o => o.id === organizer.id)
+      );
+      
+      matchingUsers = uniqueOrganizers.filter(organizer => 
+        organizer.name.toLowerCase().includes(lowercaseQuery)
+      ).slice(0, 5);
+    }
+
+    setSearchResults({
+      events: matchingEvents,
+      users: matchingUsers
+    });
+  };
+
+  const handleSearchChange = (text: string) => {
+    setSearchQuery(text);
+    performSearch(text);
+  };
+
+  const openSearch = () => {
+    setSearchVisible(true);
+    setSearchQuery('');
+    setSearchResults({ events: [], users: [] });
+  };
+
+  const closeSearch = () => {
+    setSearchVisible(false);
+    setSearchQuery('');
+    setSearchResults({ events: [], users: [] });
+  };
+
+  const handleEventSelect = (eventId: string) => {
+    closeSearch();
+    router.push({
+      pathname: '/event/[id]',
+      params: { id: eventId }
+    });
+  };
+
+  const handleUserSelect = (userId: string) => {
+    closeSearch();
+    router.push({
+      pathname: '/organizer/[id]',
+      params: { id: userId }
+    });
   };
   
   return (
     <ThemedView style={styles.container}>
       <ThemedView style={styles.header}>
+        {/* Empty left spacer to balance the search button */}
+        <View style={styles.headerSpacer} />
+        
         <View style={styles.headerActions}>
           {/* Filter button */}
           <TouchableOpacity 
@@ -183,6 +282,18 @@ export default function EventsScreen() {
             />
           </TouchableOpacity>
         </View>
+        
+        {/* Search button */}
+        <TouchableOpacity 
+          style={styles.searchButton}
+          onPress={openSearch}
+        >
+          <IconSymbol 
+            name="magnifyingglass" 
+            size={20} 
+            color={Colors[colorScheme ?? 'light'].text} 
+          />
+        </TouchableOpacity>
       </ThemedView>
       
       <FlatList
@@ -201,6 +312,7 @@ export default function EventsScreen() {
             tintColor={Colors[colorScheme ?? 'light'].tint}
             title="Pull to refresh events..."
             titleColor={Colors[colorScheme ?? 'light'].text}
+            progressBackgroundColor={Colors[colorScheme ?? 'light'].background}
           />
         }
         ListEmptyComponent={
@@ -446,6 +558,93 @@ export default function EventsScreen() {
         </View>
       </Modal>
 
+      {/* Search Overlay and Modal */}
+      {searchVisible && (
+        <>
+          {/* Search Overlay */}
+          <TouchableOpacity 
+            style={styles.searchOverlay}
+            activeOpacity={1}
+            onPress={closeSearch}
+          />
+          
+          {/* Search Box */}
+          <View style={styles.searchContainer}>
+            <View style={[styles.searchBox, { backgroundColor: Colors[colorScheme ?? 'light'].background }]}>
+              <IconSymbol 
+                name="magnifyingglass" 
+                size={20} 
+                color={Colors[colorScheme ?? 'light'].text} 
+                style={styles.searchIcon}
+              />
+              <TextInput
+                style={[styles.searchInput, { color: Colors[colorScheme ?? 'light'].text }]}
+                placeholder="Search events, users, locations..."
+                placeholderTextColor={Colors[colorScheme ?? 'light'].text + '60'}
+                value={searchQuery}
+                onChangeText={handleSearchChange}
+                autoFocus={true}
+              />
+            </View>
+            
+            {/* Search Results */}
+            {(searchResults.events.length > 0 || searchResults.users.length > 0) && (
+              <View style={[styles.searchResults, { backgroundColor: Colors[colorScheme ?? 'light'].background }]}>
+                {/* Events Results */}
+                {searchResults.events.length > 0 && (
+                  <>
+                    <ThemedText style={styles.searchSectionTitle}>Events</ThemedText>
+                    {searchResults.events.map((event) => (
+                      <TouchableOpacity 
+                        key={event.id}
+                        style={styles.searchResultItem}
+                        onPress={() => handleEventSelect(event.id)}
+                      >
+                        <IconSymbol 
+                          name="calendar" 
+                          size={16} 
+                          color={Colors[colorScheme ?? 'light'].text} 
+                        />
+                        <View style={styles.searchResultContent}>
+                          <ThemedText style={styles.searchResultTitle}>{event.title}</ThemedText>
+                          <ThemedText style={styles.searchResultSubtitle}>
+                            {event.city} • {event.organizer.name}
+                          </ThemedText>
+                        </View>
+                      </TouchableOpacity>
+                    ))}
+                  </>
+                )}
+                
+                {/* Users Results */}
+                {searchResults.users.length > 0 && (
+                  <>
+                    <ThemedText style={styles.searchSectionTitle}>Users</ThemedText>
+                    {searchResults.users.map((user) => (
+                      <TouchableOpacity 
+                        key={user.id}
+                        style={styles.searchResultItem}
+                        onPress={() => handleUserSelect(user.id)}
+                      >
+                        <IconSymbol 
+                          name="person.circle" 
+                          size={16} 
+                          color={Colors[colorScheme ?? 'light'].text} 
+                        />
+                        <View style={styles.searchResultContent}>
+                          <ThemedText style={styles.searchResultTitle}>{user.name}</ThemedText>
+                          <ThemedText style={styles.searchResultSubtitle}>Organizer</ThemedText>
+                        </View>
+                      </TouchableOpacity>
+                    ))}
+                  </>
+                )}
+              </View>
+            )}
+          </View>
+        </>
+      )}
+
       {/* Floating Action Button */}
       <TouchableOpacity 
         style={[
@@ -521,15 +720,33 @@ const styles = StyleSheet.create({
   },
   header: {
     flexDirection: 'row',
-    justifyContent: 'center',
+    justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 16,
     marginTop: 40,
     width: '100%', // Ensure header takes full width
   },
+  headerSpacer: {
+    width: 40, // Same width as search button to balance
+  },
   headerActions: {
     flexDirection: 'row',
     alignItems: 'center',
+  },
+  searchButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: Colors.light.background,
+    borderWidth: 1,
+    borderColor: 'rgba(0, 0, 0, 0.1)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
   },
   filterButtonType: {
     flexDirection: 'row',
@@ -770,5 +987,85 @@ const styles = StyleSheet.create({
     padding: 20,
     borderBottomWidth: 1,
     borderBottomColor: 'rgba(0, 0, 0, 0.1)',
+  },
+  // Search styles
+  searchOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    zIndex: 1000,
+  },
+  searchContainer: {
+    position: 'absolute',
+    top: 120,
+    left: 16,
+    right: 16,
+    zIndex: 1001,
+  },
+  searchBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(0, 0, 0, 0.1)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  searchIcon: {
+    marginRight: 12,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 16,
+  },
+  searchResults: {
+    marginTop: 8,
+    borderRadius: 12,
+    paddingVertical: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(0, 0, 0, 0.1)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    elevation: 8,
+    maxHeight: 300,
+  },
+  searchSectionTitle: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    marginLeft: 16,
+    marginTop: 12,
+    marginBottom: 8,
+    opacity: 0.7,
+  },
+  searchResultItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(0, 0, 0, 0.05)',
+  },
+  searchResultContent: {
+    flex: 1,
+    marginLeft: 12,
+  },
+  searchResultTitle: {
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  searchResultSubtitle: {
+    fontSize: 13,
+    opacity: 0.6,
+    marginTop: 2,
   },
 });

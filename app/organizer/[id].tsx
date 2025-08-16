@@ -73,6 +73,7 @@ export default function OrganizerDetailScreen() {
   const filteredEvents = organizerEvents.filter(event => {
     if (event.schedule.length === 0) return selectedPeriod === 'future'; // Default to future if no schedule
     
+    if (!event.schedule[0] || !event.schedule[0].date) return selectedPeriod === 'future'; // Handle invalid schedule
     const eventDate = new Date(event.schedule[0].date);
     
     if (selectedPeriod === 'future') {
@@ -82,8 +83,10 @@ export default function OrganizerDetailScreen() {
     }
   }).sort((a, b) => {
     // Sort by date
-    const dateA = a.schedule.length > 0 ? new Date(a.schedule[0].date) : new Date();
-    const dateB = b.schedule.length > 0 ? new Date(b.schedule[0].date) : new Date();
+    const dateA = a.schedule.length > 0 && a.schedule[0] && a.schedule[0].date 
+      ? new Date(a.schedule[0].date) : new Date();
+    const dateB = b.schedule.length > 0 && b.schedule[0] && b.schedule[0].date 
+      ? new Date(b.schedule[0].date) : new Date();
     
     if (selectedPeriod === 'future') {
       return dateA.getTime() - dateB.getTime(); // Ascending for future events
@@ -263,13 +266,13 @@ export default function OrganizerDetailScreen() {
             </View>
             <View style={styles.statItem}>
               <ThemedText style={styles.statNumber}>
-                {organizerEvents.filter(e => e.schedule.length > 0 && isAfter(new Date(e.schedule[0].date), now)).length}
+                {organizerEvents.filter(e => e.schedule.length > 0 && e.schedule[0] && e.schedule[0].date && isAfter(new Date(e.schedule[0].date), now)).length}
               </ThemedText>
               <ThemedText style={styles.statLabel}>Upcoming</ThemedText>
             </View>
             <View style={styles.statItem}>
               <ThemedText style={styles.statNumber}>
-                {organizerEvents.filter(e => e.schedule.length > 0 && isBefore(new Date(e.schedule[0].date), now)).length}
+                {organizerEvents.filter(e => e.schedule.length > 0 && e.schedule[0] && e.schedule[0].date && isBefore(new Date(e.schedule[0].date), now)).length}
               </ThemedText>
               <ThemedText style={styles.statLabel}>Past</ThemedText>
             </View>

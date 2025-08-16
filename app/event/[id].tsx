@@ -61,12 +61,27 @@ export default function EventDetailScreen() {
 
   // Format recurring event display
   const formatRecurringEvent = (schedule: { date: string; endDate?: string }[]) => {
+    if (!schedule || schedule.length === 0) {
+      return 'Date TBA';
+    }
+    
     if (schedule.length <= 1) {
+      if (!schedule[0] || !schedule[0].date) {
+        return 'Date TBA';
+      }
       return formatDate(schedule[0].date);
     }
 
     // Get start and end dates
-    const dates = schedule.map(s => new Date(s.date)).sort((a, b) => a.getTime() - b.getTime());
+    const dates = schedule
+      .filter(s => s && s.date) // Filter out null/undefined entries
+      .map(s => new Date(s.date))
+      .sort((a, b) => a.getTime() - b.getTime());
+    
+    if (dates.length === 0) {
+      return 'Date TBA';
+    }
+    
     const startDate = dates[0];
     const endDate = dates[dates.length - 1];
 
@@ -104,6 +119,15 @@ export default function EventDetailScreen() {
         }
       });
     }
+  };
+
+  const navigateToParticipant = (participantId: string) => {
+    router.push({
+      pathname: '/organizer/[id]',
+      params: { 
+        id: participantId
+      }
+    });
   };
 
   const getLocationDisplay = () => {
@@ -201,6 +225,9 @@ export default function EventDetailScreen() {
     // Filter to only future events (events that haven't started yet)
     const now = new Date();
     const futureEvents = events.filter(event => {
+      if (!event.schedule || event.schedule.length === 0 || !event.schedule[0] || !event.schedule[0].date) {
+        return false; // Skip events without valid schedule
+      }
       const eventDate = new Date(event.schedule[0].date);
       return eventDate > now;
     });
@@ -219,6 +246,9 @@ export default function EventDetailScreen() {
     // Filter to only future events (events that haven't started yet)
     const now = new Date();
     const futureEvents = events.filter(event => {
+      if (!event.schedule || event.schedule.length === 0 || !event.schedule[0] || !event.schedule[0].date) {
+        return false; // Skip events without valid schedule
+      }
       const eventDate = new Date(event.schedule[0].date);
       return eventDate > now;
     });
@@ -236,6 +266,9 @@ export default function EventDetailScreen() {
   // Check if navigation is possible (only among future events)
   const now = new Date();
   const futureEvents = events.filter(event => {
+    if (!event.schedule || event.schedule.length === 0 || !event.schedule[0] || !event.schedule[0].date) {
+      return false; // Skip events without valid schedule
+    }
     const eventDate = new Date(event.schedule[0].date);
     return eventDate > now;
   });
@@ -245,6 +278,12 @@ export default function EventDetailScreen() {
 
   const addToCalendar = async () => {
     try {
+      // Check if event has valid schedule
+      if (!event.schedule || event.schedule.length === 0 || !event.schedule[0] || !event.schedule[0].date) {
+        Alert.alert('Error', 'This event does not have a valid date to add to calendar.');
+        return;
+      }
+      
       // Get the first occurrence date for single events or the start date for recurring events
       const firstDate = new Date(event.schedule[0].date);
       const endDate = event.schedule[0].endDate ? new Date(event.schedule[0].endDate) : new Date(firstDate.getTime() + 60 * 60 * 1000); // Default 1 hour duration
@@ -382,7 +421,14 @@ export default function EventDetailScreen() {
         
         <View style={styles.content}>
           <View style={styles.titleSection}>
-            <ThemedText type="title" style={styles.title}>{event.title}</ThemedText>
+            <View style={styles.titleContainer}>
+              <ThemedText type="title" style={styles.title}>{event.title}</ThemedText>
+              <View style={styles.typeContainer}>
+                <ThemedText style={styles.typeText}>
+                  {eventTypeIcons[event.type]} {event.type}
+                </ThemedText>
+              </View>
+            </View>
             {user && (
               <TouchableOpacity 
                 style={[
@@ -402,73 +448,126 @@ export default function EventDetailScreen() {
           </View>
           
           <ThemedView style={styles.section}>
-            <IconSymbol name="mappin" size={20} color="#808080" />
-            <TouchableOpacity onPress={navigateToMap} disabled={!event.coordinates}>
-              <ThemedText 
-                style={[
-                  styles.location, 
-                  event.coordinates && styles.clickableLocation
-                ]}
-              >
-                {getLocationDisplay()}
-              </ThemedText>
-            </TouchableOpacity>
+            <View style={styles.sectionHeader}>
+              <IconSymbol name="text.alignleft" size={20} color="#4C8BF5" />
+              <ThemedText style={styles.sectionTitle}>About</ThemedText>
+            </View>
+            
+            {/* Location */}
+            <View style={styles.aboutItem}>
+              <TouchableOpacity onPress={navigateToMap} disabled={!event.coordinates} style={styles.aboutClickableItem}>
+                <View style={styles.iconContainer}>
+                  <IconSymbol name="mappin" size={18} color="#4C8BF5" />
+                </View>
+                <ThemedText 
+                  style={[
+                    styles.aboutItemContent, 
+                    event.coordinates && styles.clickableText
+                  ]}
+                >
+                  {getLocationDisplay()}
+                </ThemedText>
+              </TouchableOpacity>
+            </View>
+
+            {/* Schedule */}
+            <View style={styles.aboutItem}>
+              <View style={styles.aboutClickableItem}>
+                <TouchableOpacity style={styles.iconContainer} onPress={addToCalendar}>
+                  <IconSymbol name="calendar" size={18} color="#4C8BF5" />
+                </TouchableOpacity>
+                <ThemedText style={styles.aboutItemContent}>
+                  {formatRecurringEvent(event.schedule)}
+                </ThemedText>
+                {event.schedule.length > 1 && (
+                  <View style={styles.recurringBadge}>
+                    <IconSymbol name="repeat" size={10} color="#4C8BF5" />
+                    <ThemedText style={styles.recurringText}>Recurring</ThemedText>
+                  </View>
+                )}
+              </View>
+            </View>
+
+            {/* Description */}
+            <View style={styles.aboutItem}>
+              <ThemedText style={styles.sectionContent}>{event.description}</ThemedText>
+            </View>
           </ThemedView>
           
           <ThemedView style={styles.section}>
-            <View style={styles.calendarHeader}>
-              <TouchableOpacity style={styles.calendarIconButton} onPress={addToCalendar}>
-                <IconSymbol name="calendar" size={20} color="#4C8BF5" />
-              </TouchableOpacity>
-              {event.schedule.length > 1 && (
-                <View style={styles.recurringBadge}>
-                  <IconSymbol name="repeat" size={12} color="#4C8BF5" />
-                  <ThemedText style={styles.recurringText}>Recurring</ThemedText>
-                </View>
-              )}
+            <View style={styles.sectionHeader}>
+              <IconSymbol name="person.circle" size={20} color="#4C8BF5" />
+              <ThemedText style={styles.sectionTitle}>Organizer</ThemedText>
             </View>
-            <ThemedText style={styles.scheduleItem}>
-              {formatRecurringEvent(event.schedule)}
-            </ThemedText>
+            <TouchableOpacity onPress={navigateToOrganizer} style={styles.organizerCard}>
+              <View style={styles.organizerInfo}>
+                <IconSymbol name="person.circle.fill" size={32} color="#4C8BF5" />
+                <ThemedText style={[styles.sectionContent, styles.clickableText, { marginLeft: 12 }]}>
+                  {event.organizer.name}
+                </ThemedText>
+              </View>
+              <IconSymbol name="chevron.right" size={16} color="#C7C7CC" />
+            </TouchableOpacity>
           </ThemedView>
 
-          <ThemedText style={styles.type}>
-            {eventTypeIcons[event.type]} {event.type}
-          </ThemedText>
-          
-          <ThemedView style={styles.section}>
-            <ThemedText style={styles.sectionTitle}>Organizer</ThemedText>
-            <TouchableOpacity onPress={navigateToOrganizer}>
-              <ThemedText 
-                style={[styles.organizer, styles.clickableOrganizer]}
-              >
-                {event.organizer.name}
-              </ThemedText>
-            </TouchableOpacity>
-          </ThemedView>
-          
-          <ThemedView style={styles.section}>
-            <ThemedText style={styles.sectionTitle}>About</ThemedText>
-            <ThemedText style={styles.description}>{event.description}</ThemedText>
-          </ThemedView>
+          {event.participants && event.participants.length > 0 && (
+            <ThemedView style={styles.section}>
+              <View style={styles.sectionHeader}>
+                <IconSymbol name="person.2" size={20} color="#4C8BF5" />
+                <ThemedText style={styles.sectionTitle}>
+                  Participants ({event.participants.length})
+                </ThemedText>
+              </View>
+              <View style={styles.participantsContainer}>
+                {event.participants.map((participant, index) => (
+                  <TouchableOpacity 
+                    key={participant.id}
+                    onPress={() => navigateToParticipant(participant.id)}
+                    style={styles.participantItem}
+                  >
+                    <View style={styles.participantInfo}>
+                      <IconSymbol name="person.circle.fill" size={24} color="#4C8BF5" />
+                      <ThemedText 
+                        style={[styles.sectionContent, styles.clickableText, { marginLeft: 12 }]}
+                      >
+                        {participant.name}
+                      </ThemedText>
+                    </View>
+                    <IconSymbol name="chevron.right" size={16} color="#C7C7CC" />
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </ThemedView>
+          )}
           
           {event.professionals && event.professionals.length > 0 && (
             <ThemedView style={styles.section}>
-              <ThemedText style={styles.sectionTitle}>Featured Professionals</ThemedText>
-              {event.professionals.map((professional, index) => (
-                <ThemedText key={index} style={styles.professional}>{professional}</ThemedText>
-              ))}
+              <View style={styles.sectionHeader}>
+                <IconSymbol name="person.badge.shield.checkmark" size={20} color="#4C8BF5" />
+                <ThemedText style={styles.sectionTitle}>Featured Professionals</ThemedText>
+              </View>
+              <View style={styles.professionalsContainer}>
+                {event.professionals.map((professional, index) => (
+                  <View key={index} style={styles.professionalItem}>
+                    <IconSymbol name="star.fill" size={16} color="#FFD700" />
+                    <ThemedText style={[styles.sectionContent, { marginLeft: 8 }]}>{professional}</ThemedText>
+                  </View>
+                ))}
+              </View>
             </ThemedView>
           )}
           
           {event.accessibility && event.accessibility.length > 0 && (
             <ThemedView style={styles.section}>
-              <ThemedText style={styles.sectionTitle}>Accessibility</ThemedText>
+              <View style={styles.sectionHeader}>
+                <IconSymbol name="accessibility" size={20} color="#4C8BF5" />
+                <ThemedText style={styles.sectionTitle}>Accessibility</ThemedText>
+              </View>
               <View style={styles.accessibilityContainer}>
                 {event.accessibility.map((feature, index) => (
                   <View key={index} style={styles.accessibilityItem}>
                     <ThemedText style={styles.accessibilityIcon}>{accessibilityIcons[feature]}</ThemedText>
-                    <ThemedText style={styles.accessibilityLabel}>{feature}</ThemedText>
+                    <ThemedText style={[styles.sectionContent, { textTransform: 'capitalize' }]}>{feature}</ThemedText>
                   </View>
                 ))}
               </View>
@@ -476,8 +575,11 @@ export default function EventDetailScreen() {
           )}
           
           <ThemedView style={styles.section}>
-            <ThemedText style={styles.sectionTitle}>Ticket Information</ThemedText>
-            <ThemedText style={styles.ticketInfo}>
+            <View style={styles.sectionHeader}>
+              <IconSymbol name="ticket" size={20} color="#4C8BF5" />
+              <ThemedText style={styles.sectionTitle}>Ticket Information</ThemedText>
+            </View>
+            <ThemedText style={styles.sectionContent}>
               {event.ticketInfo.type === 'free' 
                 ? 'Free admission' 
                 : event.ticketInfo.type === 'donation' 
@@ -563,28 +665,70 @@ const styles = StyleSheet.create({
     backgroundColor: '#ffffff', // Ensure white background
   },
   title: {
-    fontSize: 24,
+    fontSize: 28,
+    fontWeight: 'bold',
     marginBottom: 8,
-    flex: 1,
+    lineHeight: 34,
   },
   titleSection: {
     flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 8,
+    alignItems: 'flex-start',
+    marginBottom: 32,
   },
-  type: {
-    fontSize: 16,
-    opacity: 0.7,
+  titleContainer: {
+    flex: 1,
+  },
+  typeContainer: {
+    marginTop: 8,
+  },
+  typeText: {
+    fontSize: 14,
+    color: '#666',
     textTransform: 'capitalize',
-    marginBottom: 16,
+    fontWeight: '500',
   },
   section: {
     marginBottom: 24,
   },
+  sectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
   sectionTitle: {
     fontSize: 18,
     fontWeight: '600',
-    marginBottom: 8,
+    marginLeft: 12,
+    flex: 1,
+  },
+  sectionContent: {
+    fontSize: 16,
+    lineHeight: 22,
+    color: '#333',
+  },
+  aboutItem: {
+    marginBottom: 16,
+  },
+  aboutClickableItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  iconContainer: {
+    width: 26,
+    height: 26,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  aboutItemContent: {
+    fontSize: 16,
+    lineHeight: 22,
+    color: '#333',
+    flex: 1,
+  },
+  clickableText: {
+    color: '#4C8BF5',
+    textDecorationLine: 'underline',
   },
   scheduleItem: {
     marginTop: 4,
@@ -600,12 +744,38 @@ const styles = StyleSheet.create({
     lineHeight: 22,
   },
   organizer: {},
+  organizerCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    backgroundColor: '#F8F9FA',
+    borderRadius: 12,
+  },
+  organizerInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
   clickableOrganizer: {
     color: '#007AFF', // iOS blue color to indicate it's clickable
     textDecorationLine: 'underline',
   },
   professional: {
     marginBottom: 4,
+  },
+  professionalsContainer: {
+    marginTop: 8,
+  },
+  professionalItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    backgroundColor: '#F8F9FA',
+    borderRadius: 8,
+    marginBottom: 8,
   },
   accessibilityContainer: {
     flexDirection: 'row',
@@ -617,10 +787,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginRight: 16,
     marginBottom: 8,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    backgroundColor: '#F8F9FA',
+    borderRadius: 8,
   },
   accessibilityIcon: {
     fontSize: 18,
-    marginRight: 4,
+    marginRight: 8,
   },
   accessibilityLabel: {
     textTransform: 'capitalize',
@@ -634,7 +808,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     borderRadius: 8,
     alignItems: 'center',
-    marginTop: 8,
+    marginTop: 12,
   },
   buttonText: {
     color: 'white',
@@ -679,16 +853,16 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#F0F5FF',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
+    paddingHorizontal: 6,
+    paddingVertical: 3,
+    borderRadius: 10,
     marginLeft: 8,
   },
   recurringText: {
-    fontSize: 11,
+    fontSize: 10,
     color: '#4C8BF5',
     fontWeight: '500',
-    marginLeft: 3,
+    marginLeft: 2,
   },
   calendarHeader: {
     flexDirection: 'row',
@@ -718,5 +892,28 @@ const styles = StyleSheet.create({
   },
   navigationButtonDisabled: {
     backgroundColor: '#F9F9F9',
+  },
+  participantsContainer: {
+    marginTop: 8,
+  },
+  participantItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    backgroundColor: '#F8F9FA',
+    borderRadius: 12,
+    marginBottom: 8,
+  },
+  participantInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  participantName: {
+    fontSize: 16,
+    marginLeft: 12,
+    flex: 1,
   },
 });

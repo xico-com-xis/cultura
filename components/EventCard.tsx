@@ -28,12 +28,27 @@ export default function EventCard({ event }: EventCardProps) {
 
   // Format recurring event display
   const formatRecurringEvent = (schedule: { date: string; endDate?: string }[]) => {
+    if (!schedule || schedule.length === 0) {
+      return 'Date TBA';
+    }
+    
     if (schedule.length <= 1) {
+      if (!schedule[0] || !schedule[0].date) {
+        return 'Date TBA';
+      }
       return formatDate(schedule[0].date);
     }
 
     // Get start and end dates
-    const dates = schedule.map(s => new Date(s.date)).sort((a, b) => a.getTime() - b.getTime());
+    const dates = schedule
+      .filter(s => s && s.date) // Filter out null/undefined entries
+      .map(s => new Date(s.date))
+      .sort((a, b) => a.getTime() - b.getTime());
+    
+    if (dates.length === 0) {
+      return 'Date TBA';
+    }
+    
     const startDate = dates[0];
     const endDate = dates[dates.length - 1];
 
@@ -88,6 +103,16 @@ export default function EventCard({ event }: EventCardProps) {
             ? formatRecurringEvent(event.schedule)
             : 'Date TBA'}
         </ThemedText>
+        
+        {/* Participants display */}
+        {event.participants && event.participants.length > 0 && (
+          <View style={styles.participantsContainer}>
+            <ThemedText style={styles.participantsLabel}>👥 Participants: </ThemedText>
+            <ThemedText style={styles.participantsText} numberOfLines={1}>
+              {event.participants.map(p => p.name).join(', ')}
+            </ThemedText>
+          </View>
+        )}
       </View>
     </TouchableOpacity>
   );
@@ -137,5 +162,20 @@ const styles = StyleSheet.create({
   date: {
     fontSize: 14,
     marginBottom: 4,
-  }
+  },
+  participantsContainer: {
+    flexDirection: 'row',
+    marginTop: 4,
+    alignItems: 'center',
+  },
+  participantsLabel: {
+    fontSize: 12,
+    opacity: 0.8,
+    fontWeight: '600',
+  },
+  participantsText: {
+    fontSize: 12,
+    opacity: 0.7,
+    flex: 1,
+  },
 });
