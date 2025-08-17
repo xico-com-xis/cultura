@@ -1,4 +1,5 @@
 import { format } from 'date-fns';
+import * as Clipboard from 'expo-clipboard';
 import * as Notifications from 'expo-notifications';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
@@ -365,17 +366,48 @@ export default function EventDetailScreen() {
       Alert.alert('Error', 'Unable to add event to calendar');
     }
   };
+
+  const shareEvent = async () => {
+    try {
+      // Format the event date
+      const eventDate = event.schedule && event.schedule.length > 0 && event.schedule[0] && event.schedule[0].date
+        ? format(new Date(event.schedule[0].date), 'EEEE, MMMM d, yyyy • h:mm a')
+        : 'Date TBA';
+
+      // Create the message
+      const shareMessage = `Check out this event: ${event.title}
+
+📅 ${eventDate}
+📍 ${getLocationDisplay()}
+
+Find more events on the Cultura app!`;
+
+      // Copy to clipboard
+      await Clipboard.setStringAsync(shareMessage);
+      
+      Alert.alert(
+        'Event Copied!',
+        'Event details have been copied to your clipboard. You can now paste and share it anywhere!',
+        [{ text: 'OK' }]
+      );
+    } catch (error) {
+      console.error('Share error:', error);
+      Alert.alert('Error', 'Unable to copy event details');
+    }
+  };
   
   return (
     <View style={styles.container}>
       {/* Header */}
       <ThemedView style={styles.header}>
-        <TouchableOpacity 
-          style={styles.headerBackButton}
-          onPress={() => router.back()}
-        >
-          <IconSymbol name="chevron.left" size={24} color="#007AFF" />
-        </TouchableOpacity>
+        <View style={styles.headerLeftSection}>
+          <TouchableOpacity 
+            style={styles.headerBackButton}
+            onPress={() => router.back()}
+          >
+            <IconSymbol name="chevron.left" size={24} color="#007AFF" />
+          </TouchableOpacity>
+        </View>
         <ThemedText style={styles.headerTitle}>Event Details</ThemedText>
         <View style={styles.headerRightSection}>
           <View style={styles.navigationButtons}>
@@ -408,6 +440,12 @@ export default function EventDetailScreen() {
               />
             </TouchableOpacity>
           </View>
+          <TouchableOpacity 
+            style={styles.shareButton}
+            onPress={shareEvent}
+          >
+            <IconSymbol name="square.and.arrow.up" size={18} color="#007AFF" />
+          </TouchableOpacity>
         </View>
       </ThemedView>
 
@@ -694,14 +732,22 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
+  headerLeftSection: {
+    width: 80,
+    justifyContent: 'flex-start',
+    alignItems: 'center',
+  },
   headerTitle: {
     fontSize: 18,
     fontWeight: '600',
     flex: 1,
     textAlign: 'center',
   },
-  headerSpacer: {
-    width: 40,
+  headerRightSection: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    width: 80,
+    justifyContent: 'flex-end',
   },
   scrollView: {
     flex: 1,
@@ -947,10 +993,6 @@ const styles = StyleSheet.create({
     marginRight: 8,
     borderRadius: 6,
   },
-  headerRightSection: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
   navigationButtons: {
     flexDirection: 'row',
     marginLeft: 8,
@@ -966,6 +1008,15 @@ const styles = StyleSheet.create({
   },
   navigationButtonDisabled: {
     backgroundColor: '#F9F9F9',
+  },
+  shareButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginLeft: 8,
+    backgroundColor: '#F2F2F7',
   },
   participantsContainer: {
     marginTop: 8,
