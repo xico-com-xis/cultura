@@ -28,10 +28,27 @@ export default function MyEventsScreen() {
       const past: Event[] = [];
       
       userEvents.forEach(event => {
+        // Check if event has TBA date (no schedule or invalid dates)
+        const hasTBADate = !event.schedule || 
+                          event.schedule.length === 0 || 
+                          event.schedule.every(schedule => !schedule || !schedule.date);
+        
+        // If event has TBA date, always put it in future events
+        if (hasTBADate) {
+          future.push(event);
+          return;
+        }
+        
         // Check if any schedule date is in the future
-        const hasFutureDate = event.schedule.some(schedule => 
-          new Date(schedule.date) >= now
-        );
+        const hasFutureDate = event.schedule.some(schedule => {
+          if (!schedule || !schedule.date) return false;
+          try {
+            return new Date(schedule.date) >= now;
+          } catch (error) {
+            // If date parsing fails, treat as TBA and put in future
+            return true;
+          }
+        });
         
         if (hasFutureDate) {
           future.push(event);
@@ -70,8 +87,25 @@ export default function MyEventsScreen() {
   };
 
   const isEventInPast = (event: Event) => {
+    // Events with TBA dates are never considered past events
+    const hasTBADate = !event.schedule || 
+                      event.schedule.length === 0 || 
+                      event.schedule.every(schedule => !schedule || !schedule.date);
+    
+    if (hasTBADate) {
+      return false;
+    }
+    
     const now = new Date();
-    return event.schedule.every(schedule => new Date(schedule.date) < now);
+    return event.schedule.every(schedule => {
+      if (!schedule || !schedule.date) return false;
+      try {
+        return new Date(schedule.date) < now;
+      } catch (error) {
+        // If date parsing fails, treat as TBA and not past
+        return false;
+      }
+    });
   };
 
   const handleCancelEvent = (event: Event) => {
@@ -100,6 +134,14 @@ export default function MyEventsScreen() {
     );
   };
 
+  const handleEditEvent = (event: Event) => {
+    // Navigate to edit event screen
+    router.push({
+      pathname: '/edit-event/[id]',
+      params: { id: event.id }
+    });
+  };
+
   const renderEventItem = ({ item }: { item: Event }) => {
     const isPast = isEventInPast(item);
     
@@ -120,23 +162,24 @@ export default function MyEventsScreen() {
                 {isPast ? 'Occurred' : 'Published'}
               </ThemedText>
             </View>
-            {item.schedule.length > 1 && (
-              <View style={[styles.statusBadge, styles.recurringBadge]}>
-                <IconSymbol name="repeat" size={16} color="#FF9500" />
-                <ThemedText style={[styles.statusText, { color: '#FF9500' }]}>
-                  {item.schedule.length} occurrences
-                </ThemedText>
-              </View>
-            )}
           </View>
           {!isPast && (
-            <TouchableOpacity 
-              style={styles.cancelButton}
-              onPress={() => handleCancelEvent(item)}
-            >
-              <IconSymbol name="trash" size={16} color="#DC2626" />
-              <ThemedText style={styles.cancelText}>Cancel</ThemedText>
-            </TouchableOpacity>
+            <View style={styles.actionButtons}>
+              <TouchableOpacity 
+                style={styles.editButton}
+                onPress={() => handleEditEvent(item)}
+              >
+                <IconSymbol name="pencil" size={16} color="#4C8BF5" />
+                <ThemedText style={styles.editText}>Edit</ThemedText>
+              </TouchableOpacity>
+              <TouchableOpacity 
+                style={styles.cancelButton}
+                onPress={() => handleCancelEvent(item)}
+              >
+                <IconSymbol name="trash" size={16} color="#DC2626" />
+                <ThemedText style={styles.cancelText}>Cancel</ThemedText>
+              </TouchableOpacity>
+            </View>
           )}
         </View>
       </View>
@@ -305,9 +348,6 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0, 200, 0, 0.1)',
     gap: 4,
   },
-  recurringBadge: {
-    backgroundColor: 'rgba(255, 149, 0, 0.1)',
-  },
   statusText: {
     fontSize: 12,
     fontWeight: '500',
@@ -376,5 +416,24 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '500',
     color: '#DC2626',
+  },
+  actionButtons: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  editButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+    backgroundColor: 'rgba(76, 139, 245, 0.1)',
+    gap: 4,
+  },
+  editText: {
+    fontSize: 12,
+    fontWeight: '500',
+    color: '#4C8BF5',
   },
 });

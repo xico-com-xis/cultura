@@ -122,6 +122,7 @@ type EventsContextType = {
   events: Event[];
   setEvents: React.Dispatch<React.SetStateAction<Event[]>>;
   addEvent: (event: Omit<Event, 'id'>) => Promise<Event>;
+  updateEvent: (eventId: string, eventData: Event) => Promise<void>;
   deleteEvent: (eventId: string) => Promise<void>;
   filters: FilterState;
   setSelectedTypes: (types: Array<EventType | 'all'>) => void;
@@ -1767,6 +1768,194 @@ export const EventProvider: React.FC<{children: React.ReactNode}> = ({ children 
     }
   };
 
+  // Update an existing event in Supabase and update local state
+  const updateEvent = async (eventId: string, eventData: Event) => {
+    if (!user) {
+      throw new Error('User must be logged in to update events');
+    }
+
+    try {
+      const { data: { user: currentUser }, error: userError } = await supabase.auth.getUser();
+      
+      if (userError || !currentUser) {
+        console.error('User authentication issue:', userError);
+        throw new Error('Authentication failed. Please sign in again.');
+      }
+
+      // First verify that the current user owns this event
+      const { data: eventRecord, error: eventCheckError } = await supabase
+        .from('events')
+        .select('created_by')
+        .eq('id', eventId)
+        .single();
+
+      if (eventCheckError) {
+        console.error('Error checking event ownership:', eventCheckError);
+        throw new Error('Event not found');
+      }
+
+      if (eventRecord.created_by !== currentUser.id) {
+        throw new Error('You can only edit your own events');
+      }
+
+      // Update the main event record
+      const eventPayload = {
+        title: eventData.title,
+        type: eventData.type,
+        description: eventData.description || 'No description provided',
+        location: eventData.location,
+        city: eventData.city,
+        country: eventData.country,
+        coordinates_lat: eventData.coordinates?.latitude || null,
+        coordinates_lng: eventData.coordinates?.longitude || null,
+        image_url: eventData.image || null,
+        updated_at: new Date().toISOString(),
+      };
+
+      const { error: updateError } = await supabase
+        .from('events')
+        .update(eventPayload)
+        .eq('id', eventId);
+
+      if (updateError) {
+        console.error('Failed to update event:', updateError);
+        throw new Error(`Failed to update event: ${updateError.message || 'Unknown database error'}`);
+      }
+
+      // Delete existing related data and re-insert
+      await Promise.all([
+        supabase.from('event_schedules').delete().eq('event_id', eventId),
+        supabase.from('event_tickets').delete().eq('event_id', eventId),
+        supabase.from('event_accessibility').delete().eq('event_id', eventId),
+        supabase.from('event_participants').delete().eq('event_id', eventId),
+      ]);
+
+      // Insert updated schedules
+      if (eventData.schedule && eventData.schedule.length > 0) {
+        const schedulePromises = eventData.schedule.map(async (schedule) => {
+          const { error } = await supabase
+            .from('event_schedules')
+            .insert({
+              event_id: eventId,
+              start_date: schedule.date,
+              end_date: schedule.endDate || null,
+            });
+          if (error) {
+            console.error('Schedule update error:', error);
+          }
+          return error;
+        });
+        
+        const scheduleResults = await Promise.all(schedulePromises);
+        const scheduleErrors = scheduleResults.filter(Boolean);
+        if (scheduleErrors.length > 0) {
+          console.warn('Some schedule updates failed:', scheduleErrors);
+        }
+      }
+
+      // Insert updated ticket information
+      if (eventData.ticketInfo) {
+        const { error: ticketError } = await supabase
+          .from('event_tickets')
+          .insert({
+            event_id: eventId,
+            type: eventData.ticketInfo.type,
+            price: eventData.ticketInfo.price || null,
+            currency: eventData.ticketInfo.currency || null,
+            purchase_link: eventData.ticketInfo.purchaseLink || null,
+            on_site_available: eventData.ticketInfo.onSiteAvailable || false,
+          });
+        
+        if (ticketError) {
+          console.error('Ticket update error:', ticketError);
+        }
+      }
+
+      // Insert updated accessibility features
+      if (eventData.accessibility && eventData.accessibility.length > 0) {
+        const accessibilityPromises = eventData.accessibility.map(async (featureType) => {
+          const { error } = await supabase
+            .from('event_accessibility')
+            .insert({
+              event_id: eventId,
+              feature: featureType,
+            });
+          if (error) {
+            console.error('Accessibility update error:', error);
+          }
+          return error;
+        });
+        
+        const accessibilityResults = await Promise.all(accessibilityPromises);
+        const accessibilityErrors = accessibilityResults.filter(Boolean);
+        if (accessibilityErrors.length > 0) {
+          console.warn('Some accessibility updates failed:', accessibilityErrors);
+        }
+      }
+
+      // Insert updated participants
+      if (eventData.participants && eventData.participants.length > 0) {
+        const participantPromises = eventData.participants.map(async (participant) => {
+          const { error } = await supabase
+            .from('event_participants')
+            .insert({
+              event_id: eventId,
+              user_id: participant.id,
+            });
+          if (error) {
+            console.error('Participant update error:', error);
+          }
+          return error;
+        });
+        
+        const participantResults = await Promise.all(participantPromises);
+        const participantErrors = participantResults.filter(Boolean);
+        if (participantErrors.length > 0) {
+          console.warn('Some participant updates failed:', participantErrors);
+        }
+      }
+
+      // Update local state immediately for instant UI update
+      setEvents(prevEvents => prevEvents.map(event => 
+        event.id === eventId ? eventData : event
+      ));
+
+      console.log('Event updated successfully:', eventId);
+
+      // Background refresh to sync with database
+      setTimeout(async () => {
+        try {
+          const { data, error } = await supabase.rpc('get_events_with_details');
+          
+          if (error) {
+            console.error('Background refresh error:', error);
+            return;
+          }
+
+          if (data && data.length > 0) {
+            // Extract all unique user IDs for batch fetching
+            const userIds = [...new Set(data.map((event: any) => event.created_by).filter(Boolean))] as string[];
+            const userNameMap = await fetchUserDisplayNames(userIds);
+            
+            // Transform events with the user name map
+            const transformedEvents: Event[] = data.map((dbEvent: any) => {
+              const organizerName = userNameMap[dbEvent.created_by] || 'Event Organizer';
+              return transformEventDataSync(dbEvent, organizerName);
+            }).filter(Boolean);
+            
+            setEvents(currentEvents => mergeEventsSmartly(currentEvents, transformedEvents));
+          }
+        } catch (error) {
+          console.error('Background refresh failed:', error);
+        }
+      }, 2000);
+
+    } catch (error) {
+      console.error('Error updating event:', error);
+      throw error;
+    }
+  };
+
   const deleteEvent = async (eventId: string) => {
     if (!user) {
       throw new Error('User must be logged in to delete events');
@@ -1899,6 +2088,7 @@ export const EventProvider: React.FC<{children: React.ReactNode}> = ({ children 
       events, 
       setEvents,
       addEvent,
+      updateEvent,
       deleteEvent, 
       filters,
       setSelectedTypes,
