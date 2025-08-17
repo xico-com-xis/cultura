@@ -97,6 +97,14 @@ export default function CreateEventForm({ onClose, onEventCreated }: CreateEvent
   const [ticketPrice, setTicketPrice] = useState('');
   const [purchaseLink, setPurchaseLink] = useState('');
 
+  // Participation type state
+  const [participationType, setParticipationType] = useState<'active' | 'audience'>('audience');
+  
+  // Duration state
+  const [durationHours, setDurationHours] = useState('');
+  const [durationMinutes, setDurationMinutes] = useState('');
+  const [isUndefinedDuration, setIsUndefinedDuration] = useState(false);
+
   // Auto-geocode when location and city are both filled
   useEffect(() => {
     const autoGeocode = async () => {
@@ -133,7 +141,8 @@ export default function CreateEventForm({ onClose, onEventCreated }: CreateEvent
            description.trim() !== '' && 
            selectedCity !== '' &&
            coordinates !== null && // Precise location is now mandatory
-           localImageUri.trim() !== ''; // Local image is now mandatory
+           localImageUri.trim() !== '' && // Local image is now mandatory
+           (isUndefinedDuration || durationHours.trim() !== '' || durationMinutes.trim() !== ''); // Duration is mandatory unless undefined
     
     // Check if event starts at least 8 hours from now
     const now = new Date();
@@ -150,6 +159,16 @@ export default function CreateEventForm({ onClose, onEventCreated }: CreateEvent
   const getMinimumDateTime = () => {
     const now = new Date();
     return new Date(now.getTime() + 8 * 60 * 60 * 1000); // 8 hours from now
+  };
+
+  // Calculate total duration in minutes
+  const getTotalDurationMinutes = () => {
+    if (isUndefinedDuration) {
+      return null; // Return null for undefined duration
+    }
+    const hours = parseInt(durationHours) || 0;
+    const minutes = parseInt(durationMinutes) || 0;
+    return hours * 60 + minutes;
   };
 
   // Generate recurring event dates
@@ -212,6 +231,8 @@ export default function CreateEventForm({ onClose, onEventCreated }: CreateEvent
         errorMessage = 'Please set a precise location using "Find Address" or "Pick on Map" buttons.';
       } else if (!localImageUri.trim()) {
         errorMessage = 'Please add an image for your event.';
+      } else if (!isUndefinedDuration && durationHours.trim() === '' && durationMinutes.trim() === '') {
+        errorMessage = 'Please specify the duration of your event or mark it as undefined.';
       } else if (eventDate < minimumStartTime) {
         errorMessage = 'Events must start at least 8 hours from now to give people time to discover and plan.';
       } else if (isRecurring && selectedWeekdays.size === 0) {
@@ -334,6 +355,8 @@ export default function CreateEventForm({ onClose, onEventCreated }: CreateEvent
         participants: selectedParticipants, // Include tagged participants
         accessibility: [],
         ticketInfo,
+        participationType, // Include participation type
+        durationMinutes: getTotalDurationMinutes(), // Include duration in minutes
         coordinates: eventCoordinates || undefined, // Convert null to undefined for type compatibility
         image: finalImageUrl || undefined, // Include the uploaded image URL
       };
@@ -508,6 +531,10 @@ export default function CreateEventForm({ onClose, onEventCreated }: CreateEvent
     setTicketType('free');
     setTicketPrice('');
     setPurchaseLink('');
+    setParticipationType('audience'); // Reset participation type
+    setDurationHours(''); // Reset duration
+    setDurationMinutes('');
+    setIsUndefinedDuration(false); // Reset undefined duration
     setIsRecurring(false);
     setSelectedWeekdays(new Set());
     const newEndDate = new Date();
@@ -910,6 +937,174 @@ export default function CreateEventForm({ onClose, onEventCreated }: CreateEvent
                   </ThemedText>
                 )}
               </View>
+            </View>
+          )}
+        </View>
+
+        {/* Participation Type */}
+        <View style={styles.inputContainer}>
+          <ThemedText style={styles.label}>Participation Type *</ThemedText>
+          <ThemedText style={styles.sublabel}>Help attendees understand what to expect - will they be actively participating or enjoying as an audience?</ThemedText>
+          <View style={styles.participationTypeContainer}>
+            <TouchableOpacity
+              style={[
+                styles.participationTypeOption,
+                participationType === 'active' && {
+                  backgroundColor: Colors[colorScheme ?? 'light'].tint,
+                  borderColor: Colors[colorScheme ?? 'light'].tint,
+                },
+              ]}
+              onPress={() => setParticipationType('active')}
+            >
+              <ThemedText
+                style={[
+                  styles.participationTypeText,
+                  participationType === 'active' && { color: '#fff' },
+                ]}
+              >
+                🎯 Active Participation
+              </ThemedText>
+              <ThemedText
+                style={[
+                  styles.participationTypeSubtext,
+                  participationType === 'active' && { color: '#fff' },
+                ]}
+              >
+                Workshops, classes, collaborative activities
+              </ThemedText>
+            </TouchableOpacity>
+            
+            <TouchableOpacity
+              style={[
+                styles.participationTypeOption,
+                participationType === 'audience' && {
+                  backgroundColor: Colors[colorScheme ?? 'light'].tint,
+                  borderColor: Colors[colorScheme ?? 'light'].tint,
+                },
+              ]}
+              onPress={() => setParticipationType('audience')}
+            >
+              <ThemedText
+                style={[
+                  styles.participationTypeText,
+                  participationType === 'audience' && { color: '#fff' },
+                ]}
+              >
+                🎵 Audience/Spectator
+              </ThemedText>
+              <ThemedText
+                style={[
+                  styles.participationTypeSubtext,
+                  participationType === 'audience' && { color: '#fff' },
+                ]}
+              >
+                Concerts, exhibitions, performances
+              </ThemedText>
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        {/* Duration */}
+        <View style={styles.inputContainer}>
+          <ThemedText style={styles.label}>Event Duration *</ThemedText>
+          <ThemedText style={styles.sublabel}>How long will your event last?</ThemedText>
+          
+          {/* Undefined duration checkbox */}
+          <TouchableOpacity
+            style={styles.checkboxContainer}
+            onPress={() => {
+              setIsUndefinedDuration(!isUndefinedDuration);
+              if (!isUndefinedDuration) {
+                // Clear duration inputs when marking as undefined
+                setDurationHours('');
+                setDurationMinutes('');
+              }
+            }}
+          >
+            <View style={[
+              styles.checkbox,
+              {
+                borderColor: Colors[colorScheme ?? 'light'].text + '50',
+                backgroundColor: isUndefinedDuration ? Colors[colorScheme ?? 'light'].tint : 'transparent',
+              }
+            ]}>
+              {isUndefinedDuration && (
+                <IconSymbol name="checkmark" size={16} color="white" />
+              )}
+            </View>
+            <ThemedText style={styles.checkboxLabel}>
+              Undefined duration (open-ended event)
+            </ThemedText>
+          </TouchableOpacity>
+          
+          {!isUndefinedDuration && (
+            <View style={styles.durationContainer}>
+              <View style={styles.durationInputGroup}>
+                <TextInput
+                  style={[
+                    styles.durationInput,
+                    {
+                      backgroundColor: Colors[colorScheme ?? 'light'].background,
+                      borderColor: Colors[colorScheme ?? 'light'].text + '30',
+                      color: Colors[colorScheme ?? 'light'].text,
+                    },
+                  ]}
+                  placeholder="0"
+                  placeholderTextColor={Colors[colorScheme ?? 'light'].text + '70'}
+                  value={durationHours}
+                  onChangeText={setDurationHours}
+                  keyboardType="numeric"
+                  maxLength={2}
+                />
+                <ThemedText style={styles.durationLabel}>hours</ThemedText>
+              </View>
+              
+              <View style={styles.durationInputGroup}>
+                <TextInput
+                  style={[
+                    styles.durationInput,
+                    {
+                      backgroundColor: Colors[colorScheme ?? 'light'].background,
+                      borderColor: Colors[colorScheme ?? 'light'].text + '30',
+                      color: Colors[colorScheme ?? 'light'].text,
+                    },
+                  ]}
+                  placeholder="0"
+                  placeholderTextColor={Colors[colorScheme ?? 'light'].text + '70'}
+                  value={durationMinutes}
+                  onChangeText={(text) => {
+                    // Limit minutes to 0-59
+                    const minutes = parseInt(text) || 0;
+                    if (minutes <= 59) {
+                      setDurationMinutes(text);
+                    }
+                  }}
+                  keyboardType="numeric"
+                  maxLength={2}
+                />
+                <ThemedText style={styles.durationLabel}>minutes</ThemedText>
+              </View>
+            </View>
+          )}
+          
+          {/* Duration preview */}
+          {(durationHours.trim() !== '' || durationMinutes.trim() !== '') && !isUndefinedDuration && (
+            <View style={styles.durationPreviewContainer}>
+              <IconSymbol name="clock" size={14} color={Colors[colorScheme ?? 'light'].tint} />
+              <ThemedText style={styles.durationPreviewText}>
+                Total duration: {getTotalDurationMinutes()} minutes
+                {getTotalDurationMinutes() && getTotalDurationMinutes()! >= 60 && ` (${Math.floor(getTotalDurationMinutes()! / 60)}h ${getTotalDurationMinutes()! % 60}m)`}
+              </ThemedText>
+            </View>
+          )}
+          
+          {/* Undefined duration preview */}
+          {isUndefinedDuration && (
+            <View style={styles.durationPreviewContainer}>
+              <IconSymbol name="clock" size={14} color={Colors[colorScheme ?? 'light'].tint} />
+              <ThemedText style={styles.durationPreviewText}>
+                Duration: Open-ended/Undefined
+              </ThemedText>
             </View>
           )}
         </View>
@@ -1406,6 +1601,84 @@ const styles = StyleSheet.create({
   },
   timeRestrictionText: {
     fontSize: 12,
+    fontWeight: '500',
+    flex: 1,
+  },
+  // Participation type styles
+  participationTypeContainer: {
+    gap: 12,
+  },
+  participationTypeOption: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(0, 0, 0, 0.1)',
+  },
+  participationTypeText: {
+    fontSize: 14,
+    fontWeight: '600',
+    marginBottom: 4,
+  },
+  participationTypeSubtext: {
+    fontSize: 12,
+    opacity: 0.7,
+  },
+  // Duration styles
+  durationContainer: {
+    flexDirection: 'row',
+    gap: 16,
+    alignItems: 'center',
+  },
+  durationInputGroup: {
+    flex: 1,
+    alignItems: 'center',
+    gap: 8,
+  },
+  durationInput: {
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    fontSize: 16,
+    textAlign: 'center',
+    minWidth: 60,
+  },
+  durationLabel: {
+    fontSize: 14,
+    fontWeight: '500',
+    opacity: 0.7,
+  },
+  durationPreviewContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 8,
+    paddingHorizontal: 4,
+    gap: 6,
+  },
+  durationPreviewText: {
+    fontSize: 12,
+    fontWeight: '500',
+    color: Colors.light.tint,
+  },
+  // Checkbox styles
+  checkboxContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 16,
+    paddingVertical: 8,
+  },
+  checkbox: {
+    width: 24,
+    height: 24,
+    borderWidth: 2,
+    borderRadius: 4,
+    marginRight: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  checkboxLabel: {
+    fontSize: 14,
     fontWeight: '500',
     flex: 1,
   },

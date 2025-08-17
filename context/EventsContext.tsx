@@ -1,4 +1,5 @@
 import { supabase } from '@/lib/supabase';
+import { preloadImages } from '@/utils/imageCache';
 import * as Notifications from 'expo-notifications';
 import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
 import { useAuth } from './AuthContext';
@@ -72,6 +73,9 @@ export type TicketInfo = {
   onSiteAvailable?: boolean; // If tickets are available at the venue
 };
 
+// Define participation type
+export type ParticipationType = 'active' | 'audience';
+
 // Define the event type
 export type Event = {
   id: string;
@@ -87,6 +91,8 @@ export type Event = {
   participants?: Organizer[]; // Tagged participants/users
   accessibility: AccessibilityFeature[];
   ticketInfo: TicketInfo;
+  participationType?: ParticipationType; // Type of participation required (optional for backward compatibility)
+  durationMinutes?: number | null; // Duration of the event in minutes (optional for backward compatibility, null for undefined duration)
   coordinates?: {
     latitude: number;
     longitude: number;
@@ -97,6 +103,7 @@ export type Event = {
 // Define filter state type
 type FilterState = {
   selectedTypes: Array<EventType | 'all'>;
+  selectedParticipationTypes: Array<ParticipationType | 'all'>;
   mapFilterEnabled: boolean;
   drawingMode: boolean;
   selectedCity: string | 'all';
@@ -126,6 +133,7 @@ type EventsContextType = {
   deleteEvent: (eventId: string) => Promise<void>;
   filters: FilterState;
   setSelectedTypes: (types: Array<EventType | 'all'>) => void;
+  setSelectedParticipationTypes: (types: Array<ParticipationType | 'all'>) => void;
   setMapFilterEnabled: (enabled: boolean) => void;
   setDrawingMode: (enabled: boolean) => void;
   setSelectedCity: (city: string) => void;
@@ -189,6 +197,8 @@ export const SAMPLE_EVENTS: Event[] = [
       purchaseLink: 'https://tickets.example.com/exhibition',
       onSiteAvailable: true
     },
+    participationType: 'audience',
+    durationMinutes: 600, // 10 hours (exhibition open time)
     coordinates: {
       latitude: 38.7139,
       longitude: -9.1394,
@@ -228,6 +238,8 @@ export const SAMPLE_EVENTS: Event[] = [
       purchaseLink: 'https://tickets.example.com/musicfest',
       onSiteAvailable: false
     },
+    participationType: 'audience',
+    durationMinutes: 360, // 6 hours
     coordinates: {
       latitude: 41.1579,
       longitude: -8.6291,
@@ -749,6 +761,7 @@ export const EventProvider: React.FC<{children: React.ReactNode}> = ({ children 
   // Add filter state
   const [filters, setFilters] = useState<FilterState>({
     selectedTypes: ['all'],
+    selectedParticipationTypes: ['all'],
     mapFilterEnabled: false,
     drawingMode: false,
     selectedCity: 'all',
@@ -898,6 +911,8 @@ export const EventProvider: React.FC<{children: React.ReactNode}> = ({ children 
       accessibility: accessibility,
       ticketInfo: ticketInfo,
       participants: participants,
+      participationType: dbEvent.participation_type as ParticipationType || 'audience', // Default to audience
+      durationMinutes: dbEvent.duration_minutes || 60, // Default to 1 hour
       coordinates: dbEvent.coordinates_lat && dbEvent.coordinates_lng ? {
         latitude: parseFloat(dbEvent.coordinates_lat),
         longitude: parseFloat(dbEvent.coordinates_lng)
@@ -1104,9 +1119,29 @@ export const EventProvider: React.FC<{children: React.ReactNode}> = ({ children 
     testConnection();
   }, []);
 
+  // Preload images when events are loaded or updated
+  useEffect(() => {
+    if (events.length > 0) {
+      const imageUrls = events
+        .map(event => event.image)
+        .filter((url): url is string => Boolean(url));
+      
+      if (imageUrls.length > 0) {
+        // Preload images in background without blocking UI
+        preloadImages(imageUrls).catch(error => {
+          console.warn('Image preloading failed:', error);
+        });
+      }
+    }
+  }, [events]);
+
   // Filter update methods
   const setSelectedTypes = (types: Array<EventType | 'all'>) => {
     setFilters(prev => ({ ...prev, selectedTypes: types }));
+  };
+
+  const setSelectedParticipationTypes = (types: Array<ParticipationType | 'all'>) => {
+    setFilters(prev => ({ ...prev, selectedParticipationTypes: types }));
   };
 
   const setMapFilterEnabled = (enabled: boolean) => {
@@ -1603,6 +1638,8 @@ export const EventProvider: React.FC<{children: React.ReactNode}> = ({ children 
         coordinates_lat: eventData.coordinates?.latitude || null,
         coordinates_lng: eventData.coordinates?.longitude || null,
         image_url: eventData.image || null,
+        participation_type: eventData.participationType || 'audience',
+        duration_minutes: eventData.durationMinutes || 60,
         created_by: currentUser.id,
       };
 
@@ -1724,6 +1761,8 @@ export const EventProvider: React.FC<{children: React.ReactNode}> = ({ children 
         participants: eventData.participants || [], // Include participants
         accessibility: eventData.accessibility || [],
         ticketInfo: eventData.ticketInfo,
+        participationType: eventData.participationType || 'audience',
+        durationMinutes: eventData.durationMinutes || 60,
         coordinates: eventData.coordinates,
         image: eventData.image,
       };
@@ -1809,6 +1848,8 @@ export const EventProvider: React.FC<{children: React.ReactNode}> = ({ children 
         coordinates_lat: eventData.coordinates?.latitude || null,
         coordinates_lng: eventData.coordinates?.longitude || null,
         image_url: eventData.image || null,
+        participation_type: eventData.participationType || 'audience',
+        duration_minutes: eventData.durationMinutes || 60,
         updated_at: new Date().toISOString(),
       };
 
@@ -2051,6 +2092,11 @@ export const EventProvider: React.FC<{children: React.ReactNode}> = ({ children 
       const passesTypeFilter = filters.selectedTypes.includes('all') || 
                               filters.selectedTypes.includes(event.type);
       
+      // Participation type filter: event passes if 'all' is selected or its participation type is in selectedParticipationTypes
+      const passesParticipationTypeFilter = filters.selectedParticipationTypes.includes('all') || 
+                                           (event.participationType && filters.selectedParticipationTypes.includes(event.participationType)) ||
+                                           (!event.participationType && filters.selectedParticipationTypes.includes('audience')); // Default to audience for events without participationType
+      
       // Country filter: only show events from selected country
       const passesCountryFilter = event.country === filters.selectedCountry;
       
@@ -2075,16 +2121,17 @@ export const EventProvider: React.FC<{children: React.ReactNode}> = ({ children 
                                    ));
       
       // Event must pass ALL filters
-      return passesTypeFilter && passesCountryFilter && passesCityFilter && passesMapFilter && passesFollowingFilter;
+      return passesTypeFilter && passesParticipationTypeFilter && passesCountryFilter && passesCityFilter && passesMapFilter && passesFollowingFilter;
     });
-  }, [events, filters.selectedTypes, filters.selectedCountry, filters.selectedCity, filters.mapFilterEnabled, filters.polygonCoords, filters.showFollowingOnly, favoriteState.favoritePeople]);
+  }, [events, filters.selectedTypes, filters.selectedParticipationTypes, filters.selectedCountry, filters.selectedCity, filters.mapFilterEnabled, filters.polygonCoords, filters.showFollowingOnly, favoriteState.favoritePeople]);
 
   const hasActiveTypeFilters = useMemo(() => {
     return !(filters.selectedTypes.length === 1 && filters.selectedTypes.includes('all')) ||
+           !(filters.selectedParticipationTypes.length === 1 && filters.selectedParticipationTypes.includes('all')) ||
            filters.selectedCity !== 'all' ||
            filters.mapFilterEnabled ||
            filters.showFollowingOnly;
-  }, [filters.selectedTypes, filters.selectedCity, filters.mapFilterEnabled, filters.showFollowingOnly]);
+  }, [filters.selectedTypes, filters.selectedParticipationTypes, filters.selectedCity, filters.mapFilterEnabled, filters.showFollowingOnly]);
 
   return (
     <EventsContext.Provider value={{ 
@@ -2095,6 +2142,7 @@ export const EventProvider: React.FC<{children: React.ReactNode}> = ({ children 
       deleteEvent, 
       filters,
       setSelectedTypes,
+      setSelectedParticipationTypes,
       setMapFilterEnabled,
       setDrawingMode,
       setSelectedCity,

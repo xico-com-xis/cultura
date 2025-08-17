@@ -1,7 +1,8 @@
 import { format } from 'date-fns';
 import { useRouter } from 'expo-router';
-import { Image, StyleSheet, TouchableOpacity, View } from 'react-native';
+import { StyleSheet, TouchableOpacity, View } from 'react-native';
 
+import { CachedImage } from '@/components/CachedImage';
 import { ThemedText } from '@/components/ThemedText';
 import { Colors } from '@/constants/Colors';
 import { eventTypeIcons } from '@/constants/EventTypes';
@@ -80,7 +81,7 @@ export default function EventCard({ event }: EventCardProps) {
       activeOpacity={0.7}
     >
       {event.image ? (
-        <Image 
+        <CachedImage 
           source={{ uri: event.image }} 
           style={styles.image}
           resizeMode="cover"
@@ -103,16 +104,6 @@ export default function EventCard({ event }: EventCardProps) {
             ? formatRecurringEvent(event.schedule)
             : 'Date TBA'}
         </ThemedText>
-        
-        {/* Participants display */}
-        {event.participants && event.participants.length > 0 && (
-          <View style={styles.participantsContainer}>
-            <ThemedText style={styles.participantsLabel}>👥 Participants: </ThemedText>
-            <ThemedText style={styles.participantsText} numberOfLines={1}>
-              {event.participants.map(p => p.name).join(', ')}
-            </ThemedText>
-          </View>
-        )}
       </View>
     </TouchableOpacity>
   );
@@ -133,11 +124,11 @@ const styles = StyleSheet.create({
   },
   image: {
     width: '100%',
-    height: 160,
+    height: 200,
   },
   imagePlaceholder: {
     width: '100%',
-    height: 160,
+    height: 200,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -162,20 +153,5 @@ const styles = StyleSheet.create({
   date: {
     fontSize: 14,
     marginBottom: 4,
-  },
-  participantsContainer: {
-    flexDirection: 'row',
-    marginTop: 4,
-    alignItems: 'center',
-  },
-  participantsLabel: {
-    fontSize: 12,
-    opacity: 0.8,
-    fontWeight: '600',
-  },
-  participantsText: {
-    fontSize: 12,
-    opacity: 0.7,
-    flex: 1,
   },
 });

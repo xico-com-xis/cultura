@@ -11,7 +11,7 @@ import { IconSymbol } from '@/components/ui/IconSymbol';
 import { Colors } from '@/constants/Colors';
 import { eventTypeOptions } from '@/constants/EventTypes';
 import { useAuth } from '@/context/AuthContext';
-import { EventType, useEvents } from '@/context/EventsContext';
+import { EventType, ParticipationType, useEvents } from '@/context/EventsContext';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { supabase } from '@/lib/supabase';
 
@@ -21,6 +21,7 @@ export default function EventsScreen() {
     filteredEvents, 
     filters, 
     setSelectedTypes, 
+    setSelectedParticipationTypes,
     setMapFilterEnabled, 
     setDrawingMode,
     setSelectedCity,
@@ -48,6 +49,7 @@ export default function EventsScreen() {
   
   // Add temporary state variables for the modal
   const [tempSelectedTypes, setTempSelectedTypes] = useState<Array<EventType | 'all'>>(['all']);
+  const [tempSelectedParticipationTypes, setTempSelectedParticipationTypes] = useState<Array<ParticipationType | 'all'>>(['all']);
   const [tempSelectedCity, setTempSelectedCity] = useState<string>('all');
   const [tempShowFollowingOnly, setTempShowFollowingOnly] = useState(false);
 
@@ -61,6 +63,7 @@ export default function EventsScreen() {
   // Update temporary filter states when modal opens
   const openFilterModal = () => {
     setTempSelectedTypes([...filters.selectedTypes]);
+    setTempSelectedParticipationTypes([...filters.selectedParticipationTypes]);
     setTempShowFollowingOnly(filters.showFollowingOnly || false);
     setFilterModalVisible(true);
   };
@@ -68,6 +71,7 @@ export default function EventsScreen() {
   // Apply filters and close modal
   const applyFilters = () => {
     setSelectedTypes([...tempSelectedTypes]);
+    setSelectedParticipationTypes([...tempSelectedParticipationTypes]);
     setShowFollowingOnly(tempShowFollowingOnly);
     setFilterModalVisible(false);
   };
@@ -100,7 +104,8 @@ export default function EventsScreen() {
   
   // Check if category filters are active
   const areCategoryFiltersActive = () => {
-    return !(filters.selectedTypes.length === 1 && filters.selectedTypes.includes('all'));
+    return !(filters.selectedTypes.length === 1 && filters.selectedTypes.includes('all')) ||
+           !(filters.selectedParticipationTypes.length === 1 && filters.selectedParticipationTypes.includes('all'));
   };
 
   // Check if zone filters are active
@@ -399,6 +404,67 @@ export default function EventsScreen() {
                     style={[
                       styles.filterOptionText, 
                       tempSelectedTypes.includes(option.type) && { color: '#fff' }
+                    ]}
+                  >
+                    {option.icon} {option.label}
+                  </ThemedText>
+                </TouchableOpacity>
+              ))}
+            </View>
+            
+            {/* Participation Type Selection */}
+            <ThemedText style={styles.filterSectionTitle}>Participation Type</ThemedText>
+            <View style={styles.filterOptionsGrid}>
+              {[
+                { type: 'all' as const, label: 'All Types', icon: '🌟' },
+                { type: 'active' as const, label: 'Active Participation', icon: '👥' },
+                { type: 'audience' as const, label: 'Audience', icon: '👁️' }
+              ].map((option) => (
+                <TouchableOpacity 
+                  key={option.type}
+                  style={[
+                    styles.filterOption,
+                    tempSelectedParticipationTypes.includes(option.type) && {
+                      backgroundColor: Colors[colorScheme ?? 'light'].tint,
+                      borderColor: Colors[colorScheme ?? 'light'].tint,
+                    }
+                  ]}
+                  onPress={() => {
+                    // Toggle selection logic
+                    if (option.type === 'all') {
+                      // If "All" is selected, clear other selections
+                      setTempSelectedParticipationTypes(['all']);
+                    } else {
+                      // Handle toggling of specific types
+                      const newSelectedTypes = [...tempSelectedParticipationTypes];
+                      
+                      // Remove "all" when selecting specific types
+                      if (newSelectedTypes.includes('all')) {
+                        newSelectedTypes.splice(newSelectedTypes.indexOf('all'), 1);
+                      }
+                      
+                      // Toggle the selected type
+                      if (newSelectedTypes.includes(option.type)) {
+                        // If already selected, remove it
+                        newSelectedTypes.splice(newSelectedTypes.indexOf(option.type), 1);
+                        
+                        // If no types are selected, revert to "all"
+                        if (newSelectedTypes.length === 0) {
+                          newSelectedTypes.push('all');
+                        }
+                      } else {
+                        // If not selected, add it
+                        newSelectedTypes.push(option.type);
+                      }
+                      
+                      setTempSelectedParticipationTypes(newSelectedTypes);
+                    }
+                  }}
+                >
+                  <ThemedText 
+                    style={[
+                      styles.filterOptionText, 
+                      tempSelectedParticipationTypes.includes(option.type) && { color: '#fff' }
                     ]}
                   >
                     {option.icon} {option.label}

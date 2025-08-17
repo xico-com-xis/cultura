@@ -1,8 +1,10 @@
 import { format } from 'date-fns';
 import * as Notifications from 'expo-notifications';
 import { router, useLocalSearchParams } from 'expo-router';
-import { Alert, Image, Linking, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
+import { useState } from 'react';
+import { Alert, Linking, Modal, Pressable, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
 
+import { CachedImage } from '@/components/CachedImage';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
 import { IconSymbol } from '@/components/ui/IconSymbol';
@@ -30,6 +32,9 @@ export default function EventDetailScreen() {
     isGlobalNotificationEnabled
   } = useEvents();
   const { user } = useAuth();
+  
+  // State for image modal
+  const [isImageModalVisible, setIsImageModalVisible] = useState(false);
   
   // Convert id to string to ensure proper comparison
   const eventId = String(id);
@@ -408,11 +413,13 @@ export default function EventDetailScreen() {
 
       <ScrollView style={styles.scrollView}>        
         {event.image ? (
-          <Image 
-            source={{ uri: event.image }} 
-            style={styles.image}
-            resizeMode="cover"
-          />
+          <TouchableOpacity onPress={() => setIsImageModalVisible(true)}>
+            <CachedImage 
+              source={{ uri: event.image }} 
+              style={styles.image}
+              resizeMode="cover"
+            />
+          </TouchableOpacity>
         ) : (
           <View style={styles.imagePlaceholder}>
             <ThemedText style={styles.imagePlaceholderText}>No Image</ThemedText>
@@ -487,6 +494,44 @@ export default function EventDetailScreen() {
                 )}
               </View>
             </View>
+
+            {/* Duration */}
+            <View style={styles.aboutItem}>
+              <View style={styles.aboutClickableItem}>
+                <View style={styles.iconContainer}>
+                  <IconSymbol name="clock" size={18} color="#4C8BF5" />
+                </View>
+                <ThemedText style={styles.aboutItemContent}>
+                  {event.durationMinutes === null || event.durationMinutes === undefined
+                    ? 'Open-ended duration'
+                    : event.durationMinutes < 60 
+                      ? `${event.durationMinutes} minutes`
+                      : `${Math.floor(event.durationMinutes / 60)}h ${event.durationMinutes % 60}m`
+                  }
+                </ThemedText>
+              </View>
+            </View>
+
+            {/* Participation Type */}
+            {event.participationType && (
+              <View style={styles.aboutItem}>
+                <View style={styles.aboutClickableItem}>
+                  <View style={styles.iconContainer}>
+                    <IconSymbol 
+                      name={event.participationType === 'active' ? "person.fill" : "eye.fill"} 
+                      size={18} 
+                      color="#4C8BF5" 
+                    />
+                  </View>
+                  <ThemedText style={styles.aboutItemContent}>
+                    {event.participationType === 'active' 
+                      ? 'Active participation - Join and engage with the event'
+                      : 'Audience participation - Watch and enjoy the event'
+                    }
+                  </ThemedText>
+                </View>
+              </View>
+            )}
 
             {/* Description */}
             <View style={styles.aboutItem}>
@@ -594,6 +639,35 @@ export default function EventDetailScreen() {
           </ThemedView>
         </View>
       </ScrollView>
+
+      {/* Full Screen Image Modal */}
+      <Modal
+        visible={isImageModalVisible}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setIsImageModalVisible(false)}
+      >
+        <Pressable 
+          style={styles.modalOverlay}
+          onPress={() => setIsImageModalVisible(false)}
+        >
+          <View style={styles.modalContainer}>
+            {event.image && (
+              <CachedImage 
+                source={{ uri: event.image }} 
+                style={styles.fullScreenImage}
+                resizeMode="contain"
+              />
+            )}
+            <TouchableOpacity 
+              style={styles.closeButton}
+              onPress={() => setIsImageModalVisible(false)}
+            >
+              <IconSymbol name="xmark" size={24} color="#FFFFFF" />
+            </TouchableOpacity>
+          </View>
+        </Pressable>
+      </Modal>
     </View>
   );
 }
@@ -915,5 +989,34 @@ const styles = StyleSheet.create({
     fontSize: 16,
     marginLeft: 12,
     flex: 1,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.9)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  fullScreenImage: {
+    width: 350,
+    height: 500,
+    borderRadius: 8,
+  },
+  closeButton: {
+    position: 'absolute',
+    top: 60,
+    right: 20,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 1,
   },
 });

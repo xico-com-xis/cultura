@@ -1,3 +1,4 @@
+import { CachedImage } from '@/components/CachedImage';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { Colors } from '@/constants/Colors';
 import { eventTypeIcons } from '@/constants/EventTypes';
@@ -8,7 +9,7 @@ import * as Location from 'expo-location';
 import { router, useLocalSearchParams } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useRef, useState } from 'react';
-import { Animated, Image, Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Animated, Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import MapView, { Marker, Polygon, Polyline, PROVIDER_GOOGLE, Region } from 'react-native-maps';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -493,7 +494,7 @@ export default function MapScreen() {
 
               {/* Event Image */}
               {selectedEvent.image ? (
-                <Image 
+                <CachedImage 
                   source={{ uri: selectedEvent.image }} 
                   style={styles.eventPreviewImage}
                   resizeMode="cover"
