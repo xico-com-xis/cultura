@@ -2067,9 +2067,12 @@ export const EventProvider: React.FC<{children: React.ReactNode}> = ({ children 
                                 filters.polygonCoords
                               ));
       
-      // Following filter: when enabled, only show events from followed organizers
+      // Following filter: when enabled, only show events from followed organizers OR where followed people are participants
       const passesFollowingFilter = !filters.showFollowingOnly || 
-                                   favoriteState.favoritePeople.has(event.organizer.id);
+                                   favoriteState.favoritePeople.has(event.organizer.id) ||
+                                   (event.participants && event.participants.some(participant => 
+                                     favoriteState.favoritePeople.has(participant.id)
+                                   ));
       
       // Event must pass ALL filters
       return passesTypeFilter && passesCountryFilter && passesCityFilter && passesMapFilter && passesFollowingFilter;

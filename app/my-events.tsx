@@ -18,10 +18,20 @@ export default function MyEventsScreen() {
   const [futureEvents, setFutureEvents] = useState<Event[]>([]);
   const [pastEvents, setPastEvents] = useState<Event[]>([]);
 
-  // Filter and separate events created by the current user
+  // Filter and separate events where user is organizer or participant
   useEffect(() => {
     if (user && events.length > 0) {
-      const userEvents = events.filter(event => event.organizer.id === user.id);
+      // Include events where user is organizer OR participant
+      const userEvents = events.filter(event => {
+        // Check if user is the organizer
+        const isOrganizer = event.organizer.id === user.id;
+        
+        // Check if user is tagged as a participant
+        const isParticipant = event.participants && 
+                             event.participants.some(participant => participant.id === user.id);
+        
+        return isOrganizer || isParticipant;
+      });
       const now = new Date();
       
       const future: Event[] = [];
@@ -163,7 +173,7 @@ export default function MyEventsScreen() {
               </ThemedText>
             </View>
           </View>
-          {!isPast && (
+          {!isPast && user && item.organizer.id === user.id && (
             <View style={styles.actionButtons}>
               <TouchableOpacity 
                 style={styles.editButton}
