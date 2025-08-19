@@ -80,9 +80,9 @@ export default function EventCard({ event }: EventCardProps) {
       onPress={navigateToEventDetails}
       activeOpacity={0.7}
     >
-      {event.image ? (
+      {event.images && event.images.length > 0 ? (
         <CachedImage 
-          source={{ uri: event.image }} 
+          source={{ uri: event.images[0] }} 
           style={styles.image}
           resizeMode="cover"
         />

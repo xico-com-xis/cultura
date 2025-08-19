@@ -1,8 +1,11 @@
 import DateTimePicker from '@react-native-community/datetimepicker';
+import * as ImagePicker from 'expo-image-picker';
 import { useEffect, useState } from 'react';
 import {
+  ActionSheetIOS,
   ActivityIndicator,
   Alert,
+  Image,
   Modal,
   Platform,
   Pressable,
@@ -13,7 +16,6 @@ import {
   View,
 } from 'react-native';
 
-import ImagePickerComponent from '@/components/ImagePickerComponent';
 import LocationPicker from '@/components/LocationPicker';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
@@ -67,8 +69,8 @@ export default function CreateEventForm({ onClose, onEventCreated }: CreateEvent
   const [selectedType, setSelectedType] = useState<EventType>('other');
   const [location, setLocation] = useState('');
   const [selectedCity, setSelectedCity] = useState(availableCities[0] || '');
-  const [localImageUri, setLocalImageUri] = useState(''); // Store local image URI
-  const [uploadedImageUrl, setUploadedImageUrl] = useState(''); // Store uploaded URL
+  const [localImageUris, setLocalImageUris] = useState<string[]>([]); // Store local image URIs (max 5)
+  const [uploadedImageUrls, setUploadedImageUrls] = useState<string[]>([]); // Store uploaded URLs
   const [selectedParticipants, setSelectedParticipants] = useState<Organizer[]>([]); // Tagged participants
   
   // Location state
@@ -104,6 +106,98 @@ export default function CreateEventForm({ onClose, onEventCreated }: CreateEvent
   const [durationHours, setDurationHours] = useState('');
   const [durationMinutes, setDurationMinutes] = useState('');
   const [isUndefinedDuration, setIsUndefinedDuration] = useState(false);
+
+  // Custom image picker function
+  const pickImage = async () => {
+    if (localImageUris.length >= 5) {
+      Alert.alert('Maximum Images', 'You can only add up to 5 images per event.');
+      return;
+    }
+
+    try {
+      const showActionSheet = () => {
+        ActionSheetIOS.showActionSheetWithOptions(
+          {
+            options: ['Cancel', 'Take Photo', 'Choose from Library'],
+            cancelButtonIndex: 0,
+          },
+          async (buttonIndex) => {
+            if (buttonIndex === 1) {
+              // Take photo
+              const result = await ImagePicker.launchCameraAsync({
+                mediaTypes: ImagePicker.MediaTypeOptions.Images,
+                allowsEditing: true,
+                aspect: [16, 9],
+                quality: 0.8,
+              });
+
+              if (!result.canceled && result.assets[0]) {
+                setLocalImageUris([...localImageUris, result.assets[0].uri]);
+              }
+            } else if (buttonIndex === 2) {
+              // Choose from library
+              const result = await ImagePicker.launchImageLibraryAsync({
+                mediaTypes: ImagePicker.MediaTypeOptions.Images,
+                allowsEditing: true,
+                aspect: [16, 9],
+                quality: 0.8,
+              });
+
+              if (!result.canceled && result.assets[0]) {
+                setLocalImageUris([...localImageUris, result.assets[0].uri]);
+              }
+            }
+          }
+        );
+      };
+
+      if (Platform.OS === 'ios') {
+        showActionSheet();
+      } else {
+        // Android - show alert
+        Alert.alert(
+          'Select Image',
+          'Choose an option',
+          [
+            { text: 'Cancel', style: 'cancel' },
+            {
+              text: 'Take Photo',
+              onPress: async () => {
+                const result = await ImagePicker.launchCameraAsync({
+                  mediaTypes: ImagePicker.MediaTypeOptions.Images,
+                  allowsEditing: true,
+                  aspect: [16, 9],
+                  quality: 0.8,
+                });
+
+                if (!result.canceled && result.assets[0]) {
+                  setLocalImageUris([...localImageUris, result.assets[0].uri]);
+                }
+              }
+            },
+            {
+              text: 'Choose from Library',
+              onPress: async () => {
+                const result = await ImagePicker.launchImageLibraryAsync({
+                  mediaTypes: ImagePicker.MediaTypeOptions.Images,
+                  allowsEditing: true,
+                  aspect: [16, 9],
+                  quality: 0.8,
+                });
+
+                if (!result.canceled && result.assets[0]) {
+                  setLocalImageUris([...localImageUris, result.assets[0].uri]);
+                }
+              }
+            }
+          ]
+        );
+      }
+    } catch (error) {
+      console.error('Error picking image:', error);
+      Alert.alert('Error', 'Failed to select image. Please try again.');
+    }
+  };
 
   // Auto-geocode when location and city are both filled
   useEffect(() => {
@@ -141,7 +235,7 @@ export default function CreateEventForm({ onClose, onEventCreated }: CreateEvent
            description.trim() !== '' && 
            selectedCity !== '' &&
            coordinates !== null && // Precise location is now mandatory
-           localImageUri.trim() !== '' && // Local image is now mandatory
+           localImageUris.length > 0 && // At least one image is now mandatory
            (isUndefinedDuration || durationHours.trim() !== '' || durationMinutes.trim() !== ''); // Duration is mandatory unless undefined
     
     // Check if event starts at least 8 hours from now
@@ -229,7 +323,7 @@ export default function CreateEventForm({ onClose, onEventCreated }: CreateEvent
       
       if (!coordinates) {
         errorMessage = 'Please set a precise location using "Find Address" or "Pick on Map" buttons.';
-      } else if (!localImageUri.trim()) {
+      } else if (localImageUris.length === 0) {
         errorMessage = 'Please add an image for your event.';
       } else if (!isUndefinedDuration && durationHours.trim() === '' && durationMinutes.trim() === '') {
         errorMessage = 'Please specify the duration of your event or mark it as undefined.';
@@ -254,28 +348,38 @@ export default function CreateEventForm({ onClose, onEventCreated }: CreateEvent
     setIsSubmitting(true);
 
     try {
-      // Upload image first if we have a local image
-      let finalImageUrl = uploadedImageUrl; // Use existing uploaded URL if available
+      // Upload images first if we have local images
+      let finalImageUrls = [...uploadedImageUrls]; // Use existing uploaded URLs if available
       
-      if (localImageUri && !finalImageUrl) {
+      if (localImageUris.length > 0 && finalImageUrls.length < localImageUris.length) {
         try {
-          setUploadProgress('Uploading image...');
-          const uploadResult = await uploadImageToSupabase(localImageUri, user.id, title.trim());
-          if (uploadResult.success && uploadResult.url) {
-            finalImageUrl = uploadResult.url;
-            setUploadedImageUrl(uploadResult.url); // Store the uploaded URL
-            setUploadProgress('Creating event...');
-          } else {
-            throw new Error(uploadResult.error || 'Image upload failed');
+          setUploadProgress('Uploading images...');
+          
+          // Upload only the images that haven't been uploaded yet
+          const imagesToUpload = localImageUris.slice(finalImageUrls.length);
+          
+          for (let i = 0; i < imagesToUpload.length; i++) {
+            const imageUri = imagesToUpload[i];
+            setUploadProgress(`Uploading image ${i + 1}/${imagesToUpload.length}...`);
+            
+            const uploadResult = await uploadImageToSupabase(imageUri, user.id, `${title.trim()}_${Date.now()}_${i}`);
+            if (uploadResult.success && uploadResult.url) {
+              finalImageUrls.push(uploadResult.url);
+            } else {
+              throw new Error(uploadResult.error || 'Image upload failed');
+            }
           }
+          
+          setUploadedImageUrls(finalImageUrls); // Store the uploaded URLs
+          setUploadProgress('Creating event...');
         } catch (uploadError) {
           console.error('Image upload error:', uploadError);
           
           // Provide more specific error messages based on the error type
-          let errorMessage = 'Failed to upload image. Please try again.';
+          let errorMessage = 'Failed to upload images. Please try again.';
           if (uploadError instanceof Error) {
             if (uploadError.message.includes('timeout')) {
-              errorMessage = 'Image upload timed out. Please check your internet connection or try a smaller image.';
+              errorMessage = 'Image upload timed out. Please check your internet connection or try smaller images.';
             } else if (uploadError.message.includes('Network request timed out')) {
               errorMessage = 'Network timeout. Please check your internet connection and try again.';
             } else if (uploadError.message.includes('policy')) {
@@ -358,7 +462,7 @@ export default function CreateEventForm({ onClose, onEventCreated }: CreateEvent
         participationType, // Include participation type
         durationMinutes: getTotalDurationMinutes(), // Include duration in minutes
         coordinates: eventCoordinates || undefined, // Convert null to undefined for type compatibility
-        image: finalImageUrl || undefined, // Include the uploaded image URL
+        images: finalImageUrls.length > 0 ? finalImageUrls : undefined, // Include the uploaded image URLs
       };
 
       await addEvent(newEvent);
@@ -523,8 +627,8 @@ export default function CreateEventForm({ onClose, onEventCreated }: CreateEvent
     setDescription('');
     setSelectedType('other');
     setLocation('');
-    setLocalImageUri('');
-    setUploadedImageUrl('');
+    setLocalImageUris([]);
+    setUploadedImageUrls([]);
     setSelectedParticipants([]); // Clear participants
     setCoordinates(null);
     setShowLocationInput(false);
@@ -629,18 +733,65 @@ export default function CreateEventForm({ onClose, onEventCreated }: CreateEvent
           />
         </View>
 
-        {/* Image Upload */}
+        {/* Event Images Upload */}
         {user && (
           <View style={styles.inputContainer}>
-            <ThemedText style={styles.label}>Event Image *</ThemedText>
-            <ImagePickerComponent
-              onImageSelected={setLocalImageUri}
-              currentImageUrl={localImageUri}
-              userId={user.id}
-              eventTitle={title}
-              allowRemove={true}
-              skipUpload={true}
-            />
+            <ThemedText style={styles.label}>Event Images * (Max 5)</ThemedText>
+            <ThemedText style={[styles.label, { fontSize: 14, color: '#666', marginBottom: 12 }]}>
+              Add up to 5 images to showcase your event
+            </ThemedText>
+            
+            {/* Selected Images Preview - show first */}
+            {localImageUris.length > 0 && (
+              <View style={styles.selectedImagesContainer}>
+                <ThemedText style={[styles.label, { fontSize: 14, marginBottom: 8 }]}>
+                  Selected Images ({localImageUris.length}/5)
+                </ThemedText>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                  {localImageUris.map((uri, index) => (
+                    <View key={index} style={styles.selectedImageItem}>
+                      <Image source={{ uri }} style={styles.selectedImagePreview} />
+                      <TouchableOpacity 
+                        style={[styles.removeImageButton, { top: 4, right: 4 }]}
+                        onPress={() => {
+                          const newUris = localImageUris.filter((_, i) => i !== index);
+                          setLocalImageUris(newUris);
+                        }}
+                      >
+                        <IconSymbol name="xmark.circle.fill" size={20} color="#FF3B30" />
+                      </TouchableOpacity>
+                    </View>
+                  ))}
+                </ScrollView>
+              </View>
+            )}
+            
+            {/* Add Image Button - only show when under 5 images */}
+            {localImageUris.length < 5 && (
+              <TouchableOpacity 
+                style={[
+                  styles.addImageButton,
+                  {
+                    backgroundColor: Colors[colorScheme ?? 'light'].tint,
+                    borderColor: Colors[colorScheme ?? 'light'].tint,
+                  }
+                ]} 
+                onPress={pickImage}
+              >
+                <ThemedText style={styles.addImageButtonText}>
+                  {localImageUris.length === 0 ? '+ Add Image' : '+ Add Another Image'}
+                </ThemedText>
+              </TouchableOpacity>
+            )}
+            
+            {/* Max images reached message */}
+            {localImageUris.length >= 5 && (
+              <View style={styles.maxImagesContainer}>
+                <ThemedText style={[styles.label, { fontSize: 14, color: '#4C8BF5', textAlign: 'center' }]}>
+                  ✓ Maximum images reached (5/5)
+                </ThemedText>
+              </View>
+            )}
           </View>
         )}
 
@@ -1681,5 +1832,62 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '500',
     flex: 1,
+  },
+  // Multiple images styles
+  imagesContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+  },
+  imagePickerContainer: {
+    position: 'relative',
+    width: '48%',
+    aspectRatio: 1,
+  },
+  removeImageButton: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    backgroundColor: 'rgba(255, 255, 255, 0.9)',
+    borderRadius: 12,
+    zIndex: 1,
+  },
+  // Selected images preview styles
+  selectedImagesContainer: {
+    marginTop: 16,
+    padding: 12,
+    backgroundColor: '#F8F9FA',
+    borderRadius: 8,
+  },
+  selectedImageItem: {
+    position: 'relative',
+    marginRight: 12,
+  },
+  selectedImagePreview: {
+    width: 80,
+    height: 80,
+    borderRadius: 8,
+  },
+  addImageButton: {
+    backgroundColor: '#4C8BF5', // Will be overridden by inline style
+    padding: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginVertical: 8,
+    borderWidth: 1,
+    minHeight: 44,
+  },
+  addImageButtonText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  maxImagesContainer: {
+    padding: 16,
+    backgroundColor: '#E8F4FF',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#4C8BF5',
   },
 });

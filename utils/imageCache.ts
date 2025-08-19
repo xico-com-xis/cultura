@@ -12,11 +12,25 @@ const ensureCacheDirectory = async () => {
   }
 };
 
-// Generate a simple cache key from URL
+// Generate a unique cache key from URL
 const getCacheKey = (url: string): string => {
-  // Simple hash function - replace special characters and use base64 encoding
-  const cleanUrl = url.replace(/[^a-zA-Z0-9]/g, '');
-  return cleanUrl.substring(0, 50); // Limit length
+  // Create a simple hash from the URL
+  let hash = 0;
+  for (let i = 0; i < url.length; i++) {
+    const char = url.charCodeAt(i);
+    hash = ((hash << 5) - hash) + char;
+    hash = hash & hash; // Convert to 32-bit integer
+  }
+  
+  // Convert to positive number and add timestamp for uniqueness
+  const hashStr = Math.abs(hash).toString(36);
+  
+  // Also include the last part of the URL for better uniqueness
+  const urlParts = url.split('/');
+  const filename = urlParts[urlParts.length - 1] || '';
+  const cleanFilename = filename.replace(/[^a-zA-Z0-9_-]/g, '').substring(0, 30);
+  
+  return `${hashStr}_${cleanFilename}`;
 };
 
 // Get the cached file path for a URL

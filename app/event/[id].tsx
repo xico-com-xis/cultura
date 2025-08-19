@@ -2,8 +2,8 @@ import { format } from 'date-fns';
 import * as Clipboard from 'expo-clipboard';
 import * as Notifications from 'expo-notifications';
 import { router, useLocalSearchParams } from 'expo-router';
-import { useState } from 'react';
-import { Alert, Linking, Modal, Pressable, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
+import { useEffect, useRef, useState } from 'react';
+import { Alert, Dimensions, Linking, Modal, Pressable, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
 
 import { CachedImage } from '@/components/CachedImage';
 import { ThemedText } from '@/components/ThemedText';
@@ -12,6 +12,8 @@ import { IconSymbol } from '@/components/ui/IconSymbol';
 import { eventTypeIcons } from '@/constants/EventTypes';
 import { useAuth } from '@/context/AuthContext';
 import { AccessibilityFeature, useEvents } from '@/context/EventsContext';
+
+const { width: screenWidth } = Dimensions.get('window');
 
 const accessibilityIcons: Record<AccessibilityFeature, string> = {
   wheelchair: '♿',
@@ -36,6 +38,25 @@ export default function EventDetailScreen() {
   
   // State for image modal
   const [isImageModalVisible, setIsImageModalVisible] = useState(false);
+  const [selectedImageIndex, setSelectedImageIndex] = useState(0);
+  const [currentImageIndex, setCurrentImageIndex] = useState(0);
+  
+  // Ref for modal ScrollView
+  const modalScrollRef = useRef<ScrollView>(null);
+  
+  // Effect to scroll to selected image when modal opens
+  useEffect(() => {
+    if (isImageModalVisible && modalScrollRef.current) {
+      // Small delay to ensure the modal is fully rendered
+      setTimeout(() => {
+        modalScrollRef.current?.scrollTo({
+          x: selectedImageIndex * screenWidth,
+          y: 0,
+          animated: false,
+        });
+      }, 100);
+    }
+  }, [isImageModalVisible, selectedImageIndex]);
   
   // Convert id to string to ensure proper comparison
   const eventId = String(id);
@@ -450,14 +471,50 @@ Find more events on the Cultura app!`;
       </ThemedView>
 
       <ScrollView style={styles.scrollView}>        
-        {event.image ? (
-          <TouchableOpacity onPress={() => setIsImageModalVisible(true)}>
-            <CachedImage 
-              source={{ uri: event.image }} 
-              style={styles.image}
-              resizeMode="cover"
-            />
-          </TouchableOpacity>
+        {event.images && event.images.length > 0 ? (
+          <View style={styles.imageGallery}>
+            <ScrollView 
+              horizontal 
+              showsHorizontalScrollIndicator={false}
+              pagingEnabled
+              style={styles.imageScrollView}
+              onScroll={(event) => {
+                const scrollPosition = event.nativeEvent.contentOffset.x;
+                const index = Math.round(scrollPosition / screenWidth);
+                setCurrentImageIndex(index);
+              }}
+              scrollEventThrottle={16}
+            >
+              {event.images.map((imageUri, index) => (
+                <TouchableOpacity 
+                  key={index}
+                  onPress={() => {
+                    setSelectedImageIndex(index);
+                    setIsImageModalVisible(true);
+                  }}
+                >
+                  <CachedImage 
+                    source={{ uri: imageUri }} 
+                    style={[styles.image, { width: screenWidth }]}
+                    resizeMode="cover"
+                  />
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+            {event.images.length > 1 && (
+              <View style={styles.imageIndicator}>
+                {event.images.map((_, index) => (
+                  <View 
+                    key={index} 
+                    style={[
+                      styles.indicatorDot,
+                      { backgroundColor: index === currentImageIndex ? '#4C8BF5' : 'rgba(255,255,255,0.5)' }
+                    ]} 
+                  />
+                ))}
+              </View>
+            )}
+          </View>
         ) : (
           <View style={styles.imagePlaceholder}>
             <ThemedText style={styles.imagePlaceholderText}>No Image</ThemedText>
@@ -685,18 +742,60 @@ Find more events on the Cultura app!`;
         animationType="fade"
         onRequestClose={() => setIsImageModalVisible(false)}
       >
-        <Pressable 
-          style={styles.modalOverlay}
-          onPress={() => setIsImageModalVisible(false)}
-        >
+        <View style={styles.modalOverlay}>
+          {/* Background area that closes modal when tapped */}
+          <Pressable 
+            style={styles.modalBackground}
+            onPress={() => setIsImageModalVisible(false)}
+          />
+          
+          {/* Image content area that doesn't close modal */}
           <View style={styles.modalContainer}>
-            {event.image && (
-              <CachedImage 
-                source={{ uri: event.image }} 
-                style={styles.fullScreenImage}
-                resizeMode="contain"
-              />
+            {event.images && event.images.length > 0 && (
+              <ScrollView
+                ref={modalScrollRef}
+                horizontal
+                pagingEnabled
+                showsHorizontalScrollIndicator={false}
+                style={styles.modalImageScrollView}
+                onMomentumScrollEnd={(event) => {
+                  const scrollPosition = event.nativeEvent.contentOffset.x;
+                  const index = Math.round(scrollPosition / screenWidth);
+                  setSelectedImageIndex(index);
+                }}
+              >
+                {event.images.map((imageUri, index) => (
+                  <View key={index} style={styles.modalImageContainer}>
+                    <CachedImage 
+                      source={{ uri: imageUri }} 
+                      style={styles.fullScreenImage}
+                      resizeMode="contain"
+                    />
+                  </View>
+                ))}
+              </ScrollView>
             )}
+            
+            {/* Image counter and navigation */}
+            {event.images && event.images.length > 1 && (
+              <View style={styles.modalImageInfo}>
+                <ThemedText style={styles.imageCounter}>
+                  {selectedImageIndex + 1} of {event.images.length}
+                </ThemedText>
+                <View style={styles.modalImageIndicator}>
+                  {event.images.map((_, index) => (
+                    <View 
+                      key={index} 
+                      style={[
+                        styles.modalIndicatorDot,
+                        { backgroundColor: index === selectedImageIndex ? '#FFFFFF' : 'rgba(255,255,255,0.5)' }
+                      ]} 
+                    />
+                  ))}
+                </View>
+              </View>
+            )}
+            
             <TouchableOpacity 
               style={styles.closeButton}
               onPress={() => setIsImageModalVisible(false)}
@@ -704,7 +803,7 @@ Find more events on the Cultura app!`;
               <IconSymbol name="xmark" size={24} color="#FFFFFF" />
             </TouchableOpacity>
           </View>
-        </Pressable>
+        </View>
       </Modal>
     </View>
   );
@@ -1044,8 +1143,13 @@ const styles = StyleSheet.create({
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.9)',
-    justifyContent: 'center',
-    alignItems: 'center',
+  },
+  modalBackground: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
   },
   modalContainer: {
     flex: 1,
@@ -1069,5 +1173,60 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     zIndex: 1,
+  },
+  // Image gallery styles
+  imageGallery: {
+    position: 'relative',
+  },
+  imageScrollView: {
+    height: 250,
+  },
+  imageIndicator: {
+    position: 'absolute',
+    bottom: 16,
+    left: 0,
+    right: 0,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  indicatorDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  // Modal image navigation styles
+  modalImageScrollView: {
+    width: screenWidth,
+    height: '100%',
+  },
+  modalImageContainer: {
+    width: screenWidth,
+    height: '100%',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalImageInfo: {
+    position: 'absolute',
+    bottom: 80,
+    left: 0,
+    right: 0,
+    alignItems: 'center',
+  },
+  imageCounter: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '500',
+    marginBottom: 12,
+  },
+  modalImageIndicator: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  modalIndicatorDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
   },
 });

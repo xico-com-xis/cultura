@@ -493,9 +493,9 @@ export default function MapScreen() {
               </TouchableOpacity>
 
               {/* Event Image */}
-              {selectedEvent.image ? (
+              {selectedEvent.images && selectedEvent.images.length > 0 ? (
                 <CachedImage 
-                  source={{ uri: selectedEvent.image }} 
+                  source={{ uri: selectedEvent.images[0] }} 
                   style={styles.eventPreviewImage}
                   resizeMode="cover"
                 />

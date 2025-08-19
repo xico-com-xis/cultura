@@ -97,7 +97,7 @@ export type Event = {
     latitude: number;
     longitude: number;
   };
-  image?: string; // URL to event image
+  images?: string[]; // Array of URLs to event images (max 5)
 };
 
 // Define filter state type
@@ -203,7 +203,7 @@ export const SAMPLE_EVENTS: Event[] = [
       latitude: 38.7139,
       longitude: -9.1394,
     },
-    image: 'https://www.bizzabo.com/wp-content/uploads/2021/09/event-marketing-examples-fundraising-gala-min.png'
+    images: ['https://www.bizzabo.com/wp-content/uploads/2021/09/event-marketing-examples-fundraising-gala-min.png']
   },
   
   // PORTUGAL - Porto
@@ -244,7 +244,7 @@ export const SAMPLE_EVENTS: Event[] = [
       latitude: 41.1579,
       longitude: -8.6291,
     },
-    image: 'https://youthincmag.com/wp-content/uploads/2019/02/Top-10-Colege-Fests-India.jpg'
+    images: ['https://youthincmag.com/wp-content/uploads/2019/02/Top-10-Colege-Fests-India.jpg']
   },
   
   // PORTUGAL - Coimbra
@@ -274,7 +274,7 @@ export const SAMPLE_EVENTS: Event[] = [
       latitude: 40.2033,
       longitude: -8.4103,
     },
-    image: 'https://tripjive.com/wp-content/uploads/2024/01/Tainan-traditional-crafts-and-workshops-for-hands-on-learning-experiences.jpg'
+    images: ['https://tripjive.com/wp-content/uploads/2024/01/Tainan-traditional-crafts-and-workshops-for-hands-on-learning-experiences.jpg']
   },
   
   // SPAIN - Madrid
@@ -307,7 +307,7 @@ export const SAMPLE_EVENTS: Event[] = [
       latitude: 40.4168,
       longitude: -3.7038,
     },
-    image: 'https://dt7savnbjquj3.cloudfront.net/_imager/files/442108/MAK01_9eed5a99b701ba360780d44a67c674dc.jpg'
+    images: ['https://dt7savnbjquj3.cloudfront.net/_imager/files/442108/MAK01_9eed5a99b701ba360780d44a67c674dc.jpg']
   },
   
   // SPAIN - Barcelona
@@ -337,7 +337,7 @@ export const SAMPLE_EVENTS: Event[] = [
       latitude: 41.3851,
       longitude: 2.1734,
     },
-    image: 'https://www.herechattanooga.com/wp-content/uploads/2025/02/ishmael-reed-event.webp.webp'
+    images: ['https://www.herechattanooga.com/wp-content/uploads/2025/02/ishmael-reed-event.webp.webp']
   },
   
   // FRANCE - Paris
@@ -370,7 +370,7 @@ export const SAMPLE_EVENTS: Event[] = [
       latitude: 48.8606,
       longitude: 2.3522,
     },
-    image: 'https://tripjive.com/wp-content/uploads/2024/01/Tainan-traditional-crafts-and-workshops-for-hands-on-learning-experiences.jpg'
+    images: ['https://tripjive.com/wp-content/uploads/2024/01/Tainan-traditional-crafts-and-workshops-for-hands-on-learning-experiences.jpg']
   },
   
   // FRANCE - Lyon
@@ -403,7 +403,7 @@ export const SAMPLE_EVENTS: Event[] = [
       latitude: 45.7640,
       longitude: 4.8357,
     },
-    image: 'https://youthincmag.com/wp-content/uploads/2019/02/Top-10-Colege-Fests-India.jpg'
+    images: ['https://youthincmag.com/wp-content/uploads/2019/02/Top-10-Colege-Fests-India.jpg']
   },
   
   // ITALY - Roma
@@ -437,7 +437,7 @@ export const SAMPLE_EVENTS: Event[] = [
       latitude: 41.9028,
       longitude: 12.4964,
     },
-    image: 'https://dt7savnbjquj3.cloudfront.net/_imager/files/442108/MAK01_9eed5a99b701ba360780d44a67c674dc.jpg'
+    images: ['https://dt7savnbjquj3.cloudfront.net/_imager/files/442108/MAK01_9eed5a99b701ba360780d44a67c674dc.jpg']
   },
   
   // ITALY - Milano
@@ -472,7 +472,7 @@ export const SAMPLE_EVENTS: Event[] = [
       latitude: 45.4642,
       longitude: 9.1900,
     },
-    image: 'https://www.bizzabo.com/wp-content/uploads/2021/09/event-marketing-examples-fundraising-gala-min.png'
+    images: ['']
   },
   
   // GERMANY - Berlin
@@ -505,7 +505,7 @@ export const SAMPLE_EVENTS: Event[] = [
       latitude: 52.5200,
       longitude: 13.4050,
     },
-    image: 'https://youthincmag.com/wp-content/uploads/2019/02/Top-10-Colege-Fests-India.jpg'
+    images: ['']
   },
   
   // GERMANY - München
@@ -538,7 +538,7 @@ export const SAMPLE_EVENTS: Event[] = [
       latitude: 48.1351,
       longitude: 11.5820,
     },
-    image: 'https://www.herechattanooga.com/wp-content/uploads/2025/02/ishmael-reed-event.webp.webp'
+    images: ['']
   },
   
   // UNITED KINGDOM - London
@@ -573,7 +573,7 @@ export const SAMPLE_EVENTS: Event[] = [
       latitude: 51.5074,
       longitude: -0.1278,
     },
-    image: 'https://dt7savnbjquj3.cloudfront.net/_imager/files/442108/MAK01_9eed5a99b701ba360780d44a67c674dc.jpg'
+    images: ['']
   },
   
   // NETHERLANDS - Amsterdam
@@ -608,7 +608,7 @@ export const SAMPLE_EVENTS: Event[] = [
       latitude: 52.3676,
       longitude: 4.9041,
     },
-    image: 'https://www.bizzabo.com/wp-content/uploads/2021/09/event-marketing-examples-fundraising-gala-min.png'
+    images: ['']
   },
   
   // BELGIUM - Brussels
@@ -642,7 +642,7 @@ export const SAMPLE_EVENTS: Event[] = [
       latitude: 50.8503,
       longitude: 4.3517,
     },
-    image: 'https://tripjive.com/wp-content/uploads/2024/01/Tainan-traditional-crafts-and-workshops-for-hands-on-learning-experiences.jpg'
+    images: ['']
   },
   
   // More PORTUGAL events
@@ -675,7 +675,7 @@ export const SAMPLE_EVENTS: Event[] = [
       latitude: 38.7139,
       longitude: -9.1394,
     },
-    image: 'https://youthincmag.com/wp-content/uploads/2019/02/Top-10-Colege-Fests-India.jpg'
+    images: ['']
   },
   
   {
@@ -707,7 +707,7 @@ export const SAMPLE_EVENTS: Event[] = [
       latitude: 38.7139,
       longitude: -9.1394,
     },
-    image: 'https://tripjive.com/wp-content/uploads/2024/01/Tainan-traditional-crafts-and-workshops-for-hands-on-learning-experiences.jpg'
+    images: ['']
   },
   // Past event by SoundWave Productions for testing
   { 
@@ -745,7 +745,7 @@ export const SAMPLE_EVENTS: Event[] = [
       latitude: 38.6794,
       longitude: -9.3533,
     },
-    image: 'https://tripjive.com/wp-content/uploads/2024/01/Tainan-traditional-crafts-and-workshops-for-hands-on-learning-experiences.jpg'
+    images: ['']
   }
 ];
 
@@ -917,7 +917,34 @@ export const EventProvider: React.FC<{children: React.ReactNode}> = ({ children 
         latitude: parseFloat(dbEvent.coordinates_lat),
         longitude: parseFloat(dbEvent.coordinates_lng)
       } : undefined,
-      image: dbEvent.image_url || undefined
+      images: (() => {
+        // Handle multiple image formats:
+        // 1. New format: images array in dedicated column
+        // 2. Legacy format: single image URL in image_url
+        // 3. Multi-image format: JSON array stored in image_url field
+        
+        if (dbEvent.images && Array.isArray(dbEvent.images) && dbEvent.images.length > 0) {
+          return dbEvent.images;
+        } else if (dbEvent.images && !Array.isArray(dbEvent.images)) {
+          return [dbEvent.images];
+        } else if (dbEvent.image_url) {
+          // Check if image_url contains a JSON array (starts with '[')
+          if (typeof dbEvent.image_url === 'string' && dbEvent.image_url.startsWith('[')) {
+            try {
+              const parsedImages = JSON.parse(dbEvent.image_url);
+              return Array.isArray(parsedImages) ? parsedImages : [dbEvent.image_url];
+            } catch (error) {
+              // If parsing fails, treat as single URL
+              return [dbEvent.image_url];
+            }
+          } else {
+            // Single image URL
+            return [dbEvent.image_url];
+          }
+        } else {
+          return undefined;
+        }
+      })()
     };
   };
 
@@ -1123,7 +1150,7 @@ export const EventProvider: React.FC<{children: React.ReactNode}> = ({ children 
   useEffect(() => {
     if (events.length > 0) {
       const imageUrls = events
-        .map(event => event.image)
+        .flatMap(event => event.images || [])
         .filter((url): url is string => Boolean(url));
       
       if (imageUrls.length > 0) {
@@ -1637,7 +1664,17 @@ export const EventProvider: React.FC<{children: React.ReactNode}> = ({ children 
         country: eventData.country,
         coordinates_lat: eventData.coordinates?.latitude || null,
         coordinates_lng: eventData.coordinates?.longitude || null,
-        image_url: eventData.image || null,
+        image_url: (() => {
+          if (eventData.images && eventData.images.length > 0) {
+            if (eventData.images.length === 1) {
+              return eventData.images[0];
+            } else {
+              const jsonString = JSON.stringify(eventData.images);
+              return jsonString;
+            }
+          }
+          return null;
+        })(),
         participation_type: eventData.participationType || 'audience',
         duration_minutes: eventData.durationMinutes || 60,
         created_by: currentUser.id,
@@ -1764,7 +1801,7 @@ export const EventProvider: React.FC<{children: React.ReactNode}> = ({ children 
         participationType: eventData.participationType || 'audience',
         durationMinutes: eventData.durationMinutes || 60,
         coordinates: eventData.coordinates,
-        image: eventData.image,
+        images: eventData.images,
       };
 
       // Add to local state immediately for instant UI update
@@ -1847,7 +1884,7 @@ export const EventProvider: React.FC<{children: React.ReactNode}> = ({ children 
         country: eventData.country,
         coordinates_lat: eventData.coordinates?.latitude || null,
         coordinates_lng: eventData.coordinates?.longitude || null,
-        image_url: eventData.image || null,
+        image_url: eventData.images && eventData.images.length > 0 ? eventData.images[0] : null,
         participation_type: eventData.participationType || 'audience',
         duration_minutes: eventData.durationMinutes || 60,
         updated_at: new Date().toISOString(),

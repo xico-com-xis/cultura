@@ -68,8 +68,8 @@ export default function EditEventForm({ event, onClose, onEventUpdated }: EditEv
   const [selectedType, setSelectedType] = useState<EventType>(event.type);
   const [location, setLocation] = useState(event.location);
   const [selectedCity, setSelectedCity] = useState(event.city);
-  const [localImageUri, setLocalImageUri] = useState(event.image || ''); // Store local image URI
-  const [uploadedImageUrl, setUploadedImageUrl] = useState(event.image || ''); // Store uploaded URL
+  const [localImageUri, setLocalImageUri] = useState((event.images && event.images.length > 0 ? event.images[0] : '') || ''); // Store local image URI
+  const [uploadedImageUrl, setUploadedImageUrl] = useState((event.images && event.images.length > 0 ? event.images[0] : '') || ''); // Store uploaded URL
   const [selectedParticipants, setSelectedParticipants] = useState<Organizer[]>(event.participants || []); // Tagged participants
   
   // Location state - initialize with event coordinates
@@ -310,7 +310,7 @@ export default function EditEventForm({ event, onClose, onEventUpdated }: EditEv
       // Upload image first if we have a local image that's different from the existing one
       let finalImageUrl = uploadedImageUrl; // Use existing uploaded URL if available
       
-      if (localImageUri && localImageUri !== event.image && !finalImageUrl) {
+      if (localImageUri && localImageUri !== (event.images && event.images.length > 0 ? event.images[0] : '') && !finalImageUrl) {
         try {
           setUploadProgress('Uploading image...');
           const uploadResult = await uploadImageToSupabase(localImageUri, user.id, title.trim());
@@ -405,7 +405,7 @@ export default function EditEventForm({ event, onClose, onEventUpdated }: EditEv
         durationMinutes: getTotalDurationMinutes(), // Include duration in minutes
         ticketInfo,
         coordinates: eventCoordinates || undefined, // Convert null to undefined for type compatibility
-        image: finalImageUrl || undefined, // Include the uploaded image URL
+        images: finalImageUrl ? [finalImageUrl] : undefined, // Include the uploaded image URL as array
       };
 
       await updateEvent(event.id, updatedEvent);
