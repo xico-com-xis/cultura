@@ -5,6 +5,256 @@ export interface Coordinates {
   longitude: number;
 }
 
+export interface LocationSuggestion {
+  id: string;
+  displayName: string;
+  fullAddress: string;
+  coordinates: Coordinates;
+  relevanceScore?: number;
+}
+
+/**
+ * Gets location suggestions based on partial input, focusing on POI-type results
+ * @param query Partial address or venue name
+ * @param city City to search within
+ * @param country Country to search within
+ * @returns Promise with array of suggestions
+ */
+export const getLocationSuggestions = async (
+  query: string, 
+  city: string, 
+  country: string
+): Promise<LocationSuggestion[]> => {
+  try {
+    if (query.trim().length < 2) {
+      return []; // Don't search for very short queries
+    }
+
+    // Check if location permissions are granted
+    const { status } = await Location.requestForegroundPermissionsAsync();
+    if (status !== 'granted') {
+      console.warn('Location permission not granted, skipping location suggestions');
+      return [];
+    }
+
+    const suggestions: LocationSuggestion[] = [];
+    
+    // Focus on POI-type searches similar to what appears on Google Maps
+    const searchQueries: string[] = [];
+    
+    // POI categories that typically appear on Google Maps
+    const poiTypes = [
+      'restaurant', 'bar', 'cafe', 'hotel', 'museum', 'theater', 'cinema',
+      'shopping', 'park', 'landmark', 'tourist attraction', 'hospital',
+      'pharmacy', 'bank', 'gas station', 'airport', 'train station',
+      'school', 'university', 'library', 'church', 'mosque', 'synagogue',
+      'club', 'nightclub', 'gym', 'spa', 'beauty salon'
+    ];
+    
+    const queryLower = query.toLowerCase().trim();
+    
+    if (city && city.trim() !== '') {
+      // Primary searches - most likely to find POIs
+      searchQueries.push(
+        query, // Direct search (highest priority)
+        `${query} ${city}`, // Name + city
+      );
+      
+      // Add POI type searches if the query doesn't already contain them
+      const containsPOIType = poiTypes.some(type => 
+        queryLower.includes(type) || 
+        type.includes(queryLower) ||
+        // Portuguese equivalents
+        (type === 'restaurant' && (queryLower.includes('restaurante') || queryLower.includes('tasca'))) ||
+        (type === 'bar' && (queryLower.includes('taberna') || queryLower.includes('tasca'))) ||
+        (type === 'museum' && queryLower.includes('museu')) ||
+        (type === 'theater' && queryLower.includes('teatro')) ||
+        (type === 'church' && queryLower.includes('igreja')) ||
+        (type === 'hospital' && queryLower.includes('hospital')) ||
+        (type === 'pharmacy' && queryLower.includes('farmácia')) ||
+        (type === 'school' && queryLower.includes('escola')) ||
+        (type === 'university' && queryLower.includes('universidade'))
+      );
+      
+      if (!containsPOIType) {
+        // Try with common POI types
+        searchQueries.push(
+          `${query} restaurant ${city}`,
+          `${query} bar ${city}`,
+          `${query} cafe ${city}`,
+          `${query} museum ${city}`,
+          `${query} hotel ${city}`
+        );
+      }
+      
+      // Location-based searches
+      searchQueries.push(
+        `${query} near ${city}`,
+        `${query} in ${city}`
+      );
+    } else {
+      // Broader searches for "Other" city
+      searchQueries.push(
+        query,
+        `${query} ${country}`,
+        `${query} restaurant`,
+        `${query} bar`,
+        `${query} museum`,
+        `${query} landmark`
+      );
+    }
+
+    // Limit to most relevant searches
+    const limitedQueries = searchQueries.slice(0, 6);
+
+    // Try each query variation
+    for (const searchQuery of limitedQueries) {
+      try {
+        const geocodedLocations = await Location.geocodeAsync(searchQuery);
+        
+        if (geocodedLocations && geocodedLocations.length > 0) {
+          // Process fewer results per query to get variety
+          const limitedResults = geocodedLocations.slice(0, 3);
+          
+          for (let i = 0; i < limitedResults.length; i++) {
+            const location = limitedResults[i];
+            
+            // Try to get a readable address using reverse geocoding
+            let displayName = query;
+            let fullAddress = searchQuery;
+            
+            try {
+              const reverseGeocode = await Location.reverseGeocodeAsync({
+                latitude: location.latitude,
+                longitude: location.longitude,
+              });
+              
+              if (reverseGeocode && reverseGeocode.length > 0) {
+                const addr = reverseGeocode[0];
+                
+                // Enhanced POI name detection (similar to Google Maps POIs)
+                let venueName = '';
+                
+                if (addr.name && addr.name !== addr.street && addr.name !== addr.city && addr.name !== addr.country) {
+                  const name = addr.name.trim();
+                  const nameLower = name.toLowerCase();
+                  
+                  // Prioritize names that match our query or seem like POI names
+                  if (nameLower.includes(queryLower) || queryLower.includes(nameLower) || 
+                      poiTypes.some(type => nameLower.includes(type))) {
+                    venueName = name;
+                  } else {
+                    venueName = query.trim();
+                  }
+                } else {
+                  venueName = query.trim();
+                }
+                
+                displayName = venueName;
+                
+                // Build full address
+                const fullParts = [venueName];
+                if (addr.street && !venueName.toLowerCase().includes(addr.street.toLowerCase())) {
+                  fullParts.push(addr.street);
+                }
+                if (addr.city || city) fullParts.push(addr.city || city);
+                
+                fullAddress = fullParts.join(', ');
+              }
+            } catch (reverseError) {
+              console.log('Reverse geocoding failed, using original query');
+            }
+
+            // Calculate relevance score (prioritize POI-like results)
+            let relevanceScore = 0;
+            const displayNameLower = displayName.toLowerCase();
+            
+            // Higher score for exact matches
+            if (displayNameLower === queryLower) relevanceScore += 10;
+            else if (displayNameLower.includes(queryLower)) relevanceScore += 7;
+            else if (queryLower.includes(displayNameLower)) relevanceScore += 5;
+            
+            // Bonus for POI indicators
+            const hasPOIIndicators = poiTypes.some(type => 
+              displayNameLower.includes(type) ||
+              // Portuguese equivalents
+              (type === 'restaurant' && displayNameLower.includes('restaurante')) ||
+              (type === 'museum' && displayNameLower.includes('museu')) ||
+              (type === 'theater' && displayNameLower.includes('teatro')) ||
+              (type === 'church' && displayNameLower.includes('igreja'))
+            );
+            if (hasPOIIndicators) relevanceScore += 4;
+            
+            // Penalty for generic addresses
+            const isGenericAddress = /^(rua|avenida|largo|praça|travessa|street|avenue|road)\s/i.test(displayNameLower);
+            if (isGenericAddress) relevanceScore -= 3;
+            
+            // Bonus for first search result (direct query)
+            if (searchQuery === query) relevanceScore += 2;
+
+            const suggestion: LocationSuggestion = {
+              id: `${location.latitude}_${location.longitude}_${i}_${relevanceScore}`,
+              displayName: displayName,
+              fullAddress: fullAddress,
+              coordinates: {
+                latitude: location.latitude,
+                longitude: location.longitude,
+              },
+              relevanceScore: relevanceScore
+            };
+
+            // Filter duplicates and check country
+            let isInCorrectCountry = true;
+            if (country && country.trim() !== '') {
+              try {
+                const reverseGeocode = await Location.reverseGeocodeAsync({
+                  latitude: location.latitude,
+                  longitude: location.longitude,
+                });
+                
+                if (reverseGeocode && reverseGeocode.length > 0) {
+                  const addr = reverseGeocode[0];
+                  const resultCountry = addr.country || '';
+                  // Check if the result country matches the selected country (case insensitive)
+                  isInCorrectCountry = resultCountry.toLowerCase().includes(country.toLowerCase()) ||
+                                     country.toLowerCase().includes(resultCountry.toLowerCase());
+                }
+              } catch (filterError) {
+                console.log('Country filtering failed, including result');
+                // If filtering fails, assume it's in the correct country to avoid excluding valid results
+                isInCorrectCountry = true;
+              }
+            }
+
+            const isDuplicate = suggestions.some(existing => 
+              Math.abs(existing.coordinates.latitude - suggestion.coordinates.latitude) < 0.001 &&
+              Math.abs(existing.coordinates.longitude - suggestion.coordinates.longitude) < 0.001
+            );
+
+            if (!isDuplicate && isInCorrectCountry) {
+              suggestions.push(suggestion);
+            }
+          }
+        }
+      } catch (queryError) {
+        console.log(`Search query failed: ${searchQuery}`, queryError);
+      }
+      
+      // Stop if we have enough good results
+      if (suggestions.filter(s => (s.relevanceScore || 0) > 5).length >= 4) break;
+    }
+
+    // Sort by relevance score and return top results
+    return suggestions
+      .sort((a, b) => (b.relevanceScore || 0) - (a.relevanceScore || 0))
+      .slice(0, 5);
+    
+  } catch (error) {
+    console.error('Location suggestions failed:', error);
+    return [];
+  }
+};
+
 /**
  * Geocodes an address string to get coordinates
  * @param address Full address string (e.g., "Rua da Prata 80, Lisboa, Portugal")

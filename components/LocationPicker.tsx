@@ -3,31 +3,34 @@ import { ThemedView } from '@/components/ThemedView';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
-import { Coordinates, getCityDefaultCoordinates } from '@/utils/geocoding';
+import { Coordinates, getCityDefaultCoordinates, LocationSuggestion } from '@/utils/geocoding';
 import * as Haptics from 'expo-haptics';
-import * as Location from 'expo-location';
 import { useEffect, useRef, useState } from 'react';
 import {
-    ActivityIndicator,
     Alert,
     Dimensions,
     Modal,
     StyleSheet,
     Text,
     TouchableOpacity,
-    View,
+    View
 } from 'react-native';
-import MapView, { Marker, PROVIDER_GOOGLE, Region } from 'react-native-maps';
+import MapView, { MapPressEvent, Marker, PoiClickEvent, PROVIDER_GOOGLE, Region } from 'react-native-maps';
 
 const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
 
 interface LocationPickerProps {
   visible: boolean;
   onClose: () => void;
-  onLocationSelect: (coordinates: Coordinates, address?: string) => void;
+  onLocationSelect: (coordinates: Coordinates, venueInfo?: LocationSuggestion) => void;
   initialLocation?: Coordinates;
   city?: string;
   country?: string;
+}
+
+interface NearbyVenue extends LocationSuggestion {
+  category?: string;
+  isPopular?: boolean;
 }
 
 export default function LocationPicker({
@@ -43,8 +46,8 @@ export default function LocationPicker({
   const [selectedLocation, setSelectedLocation] = useState<Coordinates | null>(
     initialLocation || null
   );
+  const [selectedVenue, setSelectedVenue] = useState<NearbyVenue | null>(null);
   const [tempLocation, setTempLocation] = useState<Coordinates | null>(null);
-  const [isProcessingLocation, setIsProcessingLocation] = useState(false);
   const [region, setRegion] = useState<Region>({
     latitude: initialLocation?.latitude || 38.7223, // Default to Lisboa
     longitude: initialLocation?.longitude || -9.1393,
@@ -54,17 +57,19 @@ export default function LocationPicker({
 
   // Initialize map region when modal opens
   useEffect(() => {
-    if (visible && !initialLocation && city) {
-      // Use city default coordinates if no initial location
-      const cityCoords = getCityDefaultCoordinates(city);
-      if (cityCoords) {
-        const newRegion = {
-          ...cityCoords,
-          latitudeDelta: 0.0922,
-          longitudeDelta: 0.0421,
-        };
-        setRegion(newRegion);
-        setSelectedLocation(cityCoords);
+    if (visible) {
+      if (!initialLocation && city) {
+        // Use city default coordinates if no initial location
+        const cityCoords = getCityDefaultCoordinates(city);
+        if (cityCoords) {
+          const newRegion = {
+            ...cityCoords,
+            latitudeDelta: 0.0922,
+            longitudeDelta: 0.0421,
+          };
+          setRegion(newRegion);
+          setSelectedLocation(cityCoords);
+        }
       }
     }
   }, [visible, city, initialLocation]);
@@ -74,71 +79,92 @@ export default function LocationPicker({
     console.log('selectedLocation changed:', selectedLocation);
   }, [selectedLocation]);
 
-  const handleMapPress = (event: any) => {
-    const coordinate = event.nativeEvent.coordinate;
-    console.log('Map pressed at:', coordinate, 'Event details:', {
-      action: event.nativeEvent.action,
-      target: event.nativeEvent.target,
-    });
-    
-    console.log('Setting selectedLocation to:', coordinate);
-    
-    // Force immediate update using multiple approaches
-    setSelectedLocation(() => {
-      console.log('State update function called with:', coordinate);
-      return coordinate;
-    });
-    
-    // Also set temp location as backup
-    setTempLocation(coordinate);
-    
-    // Try to force a map update
-    if (mapRef.current) {
-      console.log('Forcing map to update region slightly');
-      const currentRegion = region;
-      mapRef.current.animateToRegion({
-        ...currentRegion,
-        latitude: coordinate.latitude,
-        longitude: coordinate.longitude,
-      }, 0); // 0ms animation = immediate
+  // Debug selectedVenue changes
+  useEffect(() => {
+    console.log('selectedVenue changed:', selectedVenue);
+    if (selectedVenue) {
+      console.log('selectedVenue details:', {
+        id: selectedVenue.id,
+        displayName: selectedVenue.displayName,
+        fullAddress: selectedVenue.fullAddress,
+        category: selectedVenue.category
+      });
     }
+  }, [selectedVenue]);
+
+  const handleMapPress = (event: MapPressEvent) => {
+    const coordinate = event.nativeEvent.coordinate;
+    console.log('Map pressed at:', coordinate);
     
-    console.log('selectedLocation should be set now');
+    setSelectedLocation(coordinate);
+    // Clear venue selection when user taps on map (they want to select custom location)
+    if (selectedVenue) {
+      console.log('Clearing venue selection - user selected custom location');
+      setSelectedVenue(null);
+    }
+    setTempLocation(coordinate);
     
     // Provide haptic feedback for immediate response
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    
-    // Do reverse geocoding in background without blocking UI
-    handleReverseGeocode(coordinate);
   };
 
-  const handleReverseGeocode = async (coordinate: Coordinates) => {
-    try {
-      setIsProcessingLocation(true);
-      const reverseGeocodedLocation = await Location.reverseGeocodeAsync(coordinate);
-      if (reverseGeocodedLocation.length > 0) {
-        const location = reverseGeocodedLocation[0];
-        console.log('Reverse geocoded:', location);
-      }
-    } catch (error) {
-      console.log('Reverse geocoding failed:', error);
-    } finally {
-      setIsProcessingLocation(false);
-    }
+  const handleVenueMarkerPress = (venue: NearbyVenue) => {
+    setSelectedVenue(venue);
+    setSelectedLocation(venue.coordinates);
+    setTempLocation(venue.coordinates);
+    
+    // Provide haptic feedback
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+  };
+
+  const handlePoiClick = (event: PoiClickEvent) => {
+    const { coordinate, name, placeId } = event.nativeEvent;
+    
+    console.log('POI clicked:', { name, placeId, coordinate });
+    
+    // Clean up the name by removing newlines and extra spaces
+    const cleanName = name?.replace(/\n/g, ' ').replace(/\s+/g, ' ').trim() || 'Selected Location';
+    
+    // Create a venue info object from the POI data
+    const poiVenue: NearbyVenue = {
+      id: placeId || `poi-${coordinate.latitude}-${coordinate.longitude}`,
+      displayName: cleanName,
+      fullAddress: cleanName,
+      coordinates: coordinate,
+      relevanceScore: 1.0,
+      category: 'venue' // Default category for POIs
+    };
+    
+    console.log('Created POI venue:', poiVenue);
+    
+    // Set the POI as selected venue
+    setSelectedVenue(poiVenue);
+    setSelectedLocation(coordinate);
+    setTempLocation(coordinate);
+    
+    // Provide haptic feedback
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
   };
 
   const handleMarkerDragEnd = (event: any) => {
     const coordinate = event.nativeEvent.coordinate;
-    console.log('Marker dragged to:', coordinate);
     setSelectedLocation(coordinate);
-    
-    // Do reverse geocoding in background
-    handleReverseGeocode(coordinate);
+    setSelectedVenue(null); // Clear venue selection when dragging
   };
 
   const handleConfirm = () => {
     if (selectedLocation) {
-      onLocationSelect(selectedLocation);
+      console.log('handleConfirm called with selectedLocation:', selectedLocation);
+      console.log('handleConfirm called with selectedVenue:', selectedVenue);
+      
+      // If a venue is selected, pass venue info, otherwise just coordinates
+      if (selectedVenue) {
+        console.log('Calling onLocationSelect with venue:', selectedVenue);
+        onLocationSelect(selectedLocation, selectedVenue);
+      } else {
+        console.log('Calling onLocationSelect without venue');
+        onLocationSelect(selectedLocation);
+      }
       onClose();
     } else {
       Alert.alert('No Location Selected', 'Please tap on the map to select a location.');
@@ -172,7 +198,7 @@ export default function LocationPicker({
         {/* Instructions */}
         <View style={styles.instructionsContainer}>
           <ThemedText style={styles.instructions}>
-            Tap anywhere on the map to place a pin. You can tap on buildings, landmarks, or empty space.
+            Tap on any Google Maps point of interest (restaurant, bar, landmark) or anywhere on the map to select a location.
           </ThemedText>
         </View>
 
@@ -184,11 +210,10 @@ export default function LocationPicker({
           region={region}
           onRegionChangeComplete={setRegion}
           onPress={handleMapPress}
-          onLongPress={handleMapPress} // Alternative way to place pin
-          onPoiClick={handleMapPress} // Handle POI clicks the same as regular map clicks
+          onPoiClick={handlePoiClick}
           showsUserLocation
           showsMyLocationButton={false}
-          showsPointsOfInterest={true} // Keep POIs visible but handle clicks
+          showsPointsOfInterest={true}
           showsBuildings={true}
           scrollEnabled={true}
           zoomEnabled={true}
@@ -196,24 +221,19 @@ export default function LocationPicker({
           pitchEnabled={false}
           toolbarEnabled={false}
           moveOnMarkerPress={false}
-          minZoomLevel={10}
+          minZoomLevel={3}
           maxZoomLevel={20}
-          onMapReady={() => {
-            console.log('Map is ready');
-          }}
         >
+          {/* Selected location marker */}
           {(selectedLocation || tempLocation) && (
             <Marker
-              key={`marker-${(selectedLocation || tempLocation)!.latitude}-${(selectedLocation || tempLocation)!.longitude}`} // Force re-render
+              key={`marker-${(selectedLocation || tempLocation)!.latitude}-${(selectedLocation || tempLocation)!.longitude}`}
               coordinate={selectedLocation || tempLocation!}
-              pinColor={Colors[colorScheme ?? 'light'].tint}
-              title="Event Location"
-              description="Drag to adjust or tap map to relocate"
-              draggable={true}
+              pinColor={selectedVenue ? '#FF6B6B' : Colors[colorScheme ?? 'light'].tint}
+              title={selectedVenue ? selectedVenue.displayName : "Event Location"}
+              description={selectedVenue ? selectedVenue.fullAddress : "Drag to adjust or tap map to relocate"}
+              draggable={!selectedVenue} // Only allow dragging for custom locations
               onDragEnd={handleMarkerDragEnd}
-              onDragStart={() => {
-                console.log('Marker drag started');
-              }}
             />
           )}
         </MapView>
@@ -222,14 +242,23 @@ export default function LocationPicker({
         <View style={[styles.bottomControls, { backgroundColor: Colors[colorScheme ?? 'light'].background }]}>
           {selectedLocation && (
             <View style={styles.coordinatesInfo}>
-              {isProcessingLocation ? (
-                <View style={styles.processingContainer}>
-                  <ActivityIndicator size="small" color={Colors[colorScheme ?? 'light'].tint} />
-                  <ThemedText style={styles.processingText}>Processing location...</ThemedText>
+              {selectedVenue ? (
+                <View>
+                  <ThemedText style={[styles.coordinatesText, { fontWeight: '600' }]}>
+                    📍 {selectedVenue.displayName}
+                  </ThemedText>
+                  <ThemedText style={[styles.coordinatesText, { fontSize: 12, opacity: 0.7 }]}>
+                    {selectedVenue.fullAddress}
+                  </ThemedText>
+                  {selectedVenue.category && (
+                    <ThemedText style={[styles.coordinatesText, { fontSize: 11, opacity: 0.6 }]}>
+                      {selectedVenue.category.charAt(0).toUpperCase() + selectedVenue.category.slice(1)}
+                    </ThemedText>
+                  )}
                 </View>
               ) : (
                 <ThemedText style={styles.coordinatesText}>
-                  📍 Selected: {selectedLocation.latitude.toFixed(6)}, {selectedLocation.longitude.toFixed(6)}
+                  📍 Custom location: {selectedLocation.latitude.toFixed(6)}, {selectedLocation.longitude.toFixed(6)}
                 </ThemedText>
               )}
             </View>
@@ -245,11 +274,16 @@ export default function LocationPicker({
               }
             ]}
             onPress={handleConfirm}
-            disabled={!selectedLocation || isProcessingLocation}
+            disabled={!selectedLocation}
           >
             <IconSymbol name="checkmark" size={20} color="white" />
             <Text style={styles.confirmButtonText}>
-              {selectedLocation ? 'Confirm Location' : 'Tap map to select location'}
+              {selectedLocation 
+                ? selectedVenue 
+                  ? `Confirm ${selectedVenue.displayName}` 
+                  : 'Confirm Custom Location'
+                : 'Tap map to select location'
+              }
             </Text>
           </TouchableOpacity>
         </View>

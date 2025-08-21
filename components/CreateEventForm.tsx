@@ -2,18 +2,18 @@ import DateTimePicker from '@react-native-community/datetimepicker';
 import * as ImagePicker from 'expo-image-picker';
 import { useEffect, useState } from 'react';
 import {
-  ActionSheetIOS,
-  ActivityIndicator,
-  Alert,
-  Image,
-  Modal,
-  Platform,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  TextInput,
-  TouchableOpacity,
-  View,
+    ActionSheetIOS,
+    ActivityIndicator,
+    Alert,
+    Image,
+    Modal,
+    Platform,
+    Pressable,
+    ScrollView,
+    StyleSheet,
+    TextInput,
+    TouchableOpacity,
+    View,
 } from 'react-native';
 
 import LocationPicker from '@/components/LocationPicker';
@@ -25,7 +25,7 @@ import { Colors } from '@/constants/Colors';
 import { useAuth } from '@/context/AuthContext';
 import { EventType, Organizer, TicketInfo, useEvents } from '@/context/EventsContext';
 import { useColorScheme } from '@/hooks/useColorScheme';
-import { Coordinates, createFullAddress, geocodeAddress, getCityDefaultCoordinates } from '@/utils/geocoding';
+import { Coordinates, getCityDefaultCoordinates, LocationSuggestion } from '@/utils/geocoding';
 import { uploadImageToSupabase } from '@/utils/imageUpload';
 
 interface CreateEventFormProps {
@@ -75,9 +75,14 @@ export default function CreateEventForm({ onClose, onEventCreated }: CreateEvent
   
   // Location state
   const [coordinates, setCoordinates] = useState<Coordinates | null>(null);
-  const [isGeocodingLoading, setIsGeocodingLoading] = useState(false);
   const [showLocationPicker, setShowLocationPicker] = useState(false);
-  const [showLocationInput, setShowLocationInput] = useState(false);
+  const [selectedSuggestion, setSelectedSuggestion] = useState<LocationSuggestion | null>(null);
+  const [isMapLocation, setIsMapLocation] = useState(false); // Track if coordinates are from map picker
+
+  // Debug selectedSuggestion changes
+  useEffect(() => {
+    console.log('selectedSuggestion state changed:', selectedSuggestion);
+  }, [selectedSuggestion]);
   
   // Date/time state
   const [eventDate, setEventDate] = useState(new Date());
@@ -199,35 +204,6 @@ export default function CreateEventForm({ onClose, onEventCreated }: CreateEvent
     }
   };
 
-  // Auto-geocode when location and city are both filled
-  useEffect(() => {
-    const autoGeocode = async () => {
-      // Only auto-geocode if we don't already have coordinates and both fields are filled
-      if (!coordinates && location.trim() && selectedCity && filters.selectedCountry && !isGeocodingLoading && showLocationInput) {
-        try {
-          setIsGeocodingLoading(true);
-          const fullAddress = createFullAddress(location.trim(), selectedCity, filters.selectedCountry);
-          console.log('Auto-geocoding:', fullAddress);
-          
-          const geocodedCoords = await geocodeAddress(fullAddress);
-          if (geocodedCoords) {
-            setCoordinates(geocodedCoords);
-            console.log('Auto-geocoding successful:', geocodedCoords);
-          } else {
-            console.log('Auto-geocoding failed, will need manual selection');
-          }
-        } catch (error) {
-          console.error('Auto-geocoding error:', error);
-        } finally {
-          setIsGeocodingLoading(false);
-        }
-      }
-    };
-
-    // Debounce the geocoding by 1 second to avoid too many requests
-    const timeoutId = setTimeout(autoGeocode, 1000);
-    return () => clearTimeout(timeoutId);
-  }, [location, selectedCity, filters.selectedCountry, coordinates, isGeocodingLoading, showLocationInput]);
 
   // Validation and submission
   const isFormValid = () => {
@@ -322,7 +298,7 @@ export default function CreateEventForm({ onClose, onEventCreated }: CreateEvent
       const minimumStartTime = new Date(now.getTime() + 8 * 60 * 60 * 1000);
       
       if (!coordinates) {
-        errorMessage = 'Please set a precise location using "Find Address" or "Pick on Map" buttons.';
+        errorMessage = 'Please set a precise location using the "Pick on Map" button.';
       } else if (localImageUris.length === 0) {
         errorMessage = 'Please add an image for your event.';
       } else if (!isUndefinedDuration && durationHours.trim() === '' && durationMinutes.trim() === '') {
@@ -407,34 +383,10 @@ export default function CreateEventForm({ onClose, onEventCreated }: CreateEvent
         }),
       };
 
-      // Try to get coordinates for the event
+      // Use coordinates from map picker
       let eventCoordinates = coordinates;
       
-      // If no coordinates from map picker, try geocoding
-      if (!eventCoordinates && location.trim() && selectedCity && filters.selectedCountry) {
-        try {
-          setUploadProgress('Finding location...');
-          setIsGeocodingLoading(true);
-          const fullAddress = createFullAddress(location.trim(), selectedCity, filters.selectedCountry);
-          console.log('Attempting to geocode:', fullAddress);
-          eventCoordinates = await geocodeAddress(fullAddress);
-          
-          if (eventCoordinates) {
-            console.log('Geocoding successful:', eventCoordinates);
-          } else {
-            console.log('Geocoding failed, using city default');
-            eventCoordinates = getCityDefaultCoordinates(selectedCity);
-          }
-        } catch (error) {
-          console.error('Geocoding error:', error);
-          eventCoordinates = getCityDefaultCoordinates(selectedCity);
-        } finally {
-          setIsGeocodingLoading(false);
-          setUploadProgress('Creating event...');
-        }
-      }
-      
-      // Fallback to city coordinates if no specific location
+      // Fallback to city coordinates if no specific location selected
       if (!eventCoordinates) {
         eventCoordinates = getCityDefaultCoordinates(selectedCity);
       }
@@ -446,7 +398,7 @@ export default function CreateEventForm({ onClose, onEventCreated }: CreateEvent
         title: title.trim(),
         type: selectedType,
         schedule: generateRecurringDates(),
-        location: location.trim(),
+        location: selectedSuggestion ? selectedSuggestion.displayName : location.trim(),
         city: selectedCity,
         country: filters.selectedCountry,
         description: description.trim(),
@@ -463,6 +415,15 @@ export default function CreateEventForm({ onClose, onEventCreated }: CreateEvent
         durationMinutes: getTotalDurationMinutes(), // Include duration in minutes
         coordinates: eventCoordinates || undefined, // Convert null to undefined for type compatibility
         images: finalImageUrls.length > 0 ? finalImageUrls : undefined, // Include the uploaded image URLs
+        // Include POI information when available
+        ...(selectedSuggestion && {
+          poiInfo: {
+            id: selectedSuggestion.id,
+            name: selectedSuggestion.displayName,
+            address: selectedSuggestion.fullAddress,
+            category: (selectedSuggestion as any).category || 'venue'
+          }
+        })
       };
 
       await addEvent(newEvent);
@@ -559,67 +520,28 @@ export default function CreateEventForm({ onClose, onEventCreated }: CreateEvent
   };
 
   // Location-related functions
-  const handleGeocode = async () => {
-    // Show location input if not already shown
-    if (!showLocationInput) {
-      setShowLocationInput(true);
-      return;
-    }
-
-    if (!location.trim() || !selectedCity || !filters.selectedCountry) {
-      Alert.alert(
-        'Missing Information',
-        'Please fill in the venue/location address first.'
-      );
-      return;
-    }
-
-    setIsGeocodingLoading(true);
-    try {
-      const fullAddress = createFullAddress(location.trim(), selectedCity, filters.selectedCountry);
-      console.log('Manual geocoding request for:', fullAddress);
-      
-      const geocodedCoords = await geocodeAddress(fullAddress);
-      if (geocodedCoords) {
-        setCoordinates(geocodedCoords);
-        Alert.alert(
-          'Location Found!',
-          `Successfully found coordinates for your address.`,
-          [{ text: 'OK' }]
-        );
-      } else {
-        const cityCoords = getCityDefaultCoordinates(selectedCity);
-        if (cityCoords) {
-          setCoordinates(cityCoords);
-          Alert.alert(
-            'Using City Center',
-            `Could not find exact address. Using ${selectedCity} city center instead.`,
-            [{ text: 'OK' }]
-          );
-        } else {
-          Alert.alert(
-            'Geocoding Failed',
-            'Could not find coordinates for this address. You can try "Pick on Map" instead.'
-          );
-        }
-      }
-    } catch (error) {
-      console.error('Manual geocoding error:', error);
-      Alert.alert('Error', 'Failed to geocode address. Please try again.');
-    } finally {
-      setIsGeocodingLoading(false);
-    }
-  };
-
-  const handleLocationPicked = (pickedCoordinates: Coordinates) => {
+  const handleLocationPicked = (pickedCoordinates: Coordinates, venueInfo?: LocationSuggestion) => {
+    console.log('handleLocationPicked called with:', { pickedCoordinates, venueInfo });
     setCoordinates(pickedCoordinates);
-    console.log('Location picked from map:', pickedCoordinates);
+    setIsMapLocation(true); // Mark as map location
+    
+    if (venueInfo) {
+      // If venue was selected from map POI, use venue information
+      setSelectedSuggestion(venueInfo);
+      console.log('Venue picked from map:', venueInfo);
+      console.log('Setting selectedSuggestion to:', venueInfo);
+    } else {
+      // If custom location was picked, clear venue selection
+      setSelectedSuggestion(null);
+      console.log('Custom location picked from map:', pickedCoordinates);
+    }
   };
 
   const clearLocation = () => {
     setCoordinates(null);
     setLocation('');
-    setShowLocationInput(false);
+    setSelectedSuggestion(null);
+    setIsMapLocation(false);
   };
 
   const clearForm = () => {
@@ -631,9 +553,9 @@ export default function CreateEventForm({ onClose, onEventCreated }: CreateEvent
     setUploadedImageUrls([]);
     setSelectedParticipants([]); // Clear participants
     setCoordinates(null);
-    setShowLocationInput(false);
+    setSelectedSuggestion(null); // Clear autocomplete
+    setIsMapLocation(false);
     setTicketType('free');
-    setTicketPrice('');
     setPurchaseLink('');
     setParticipationType('audience'); // Reset participation type
     setDurationHours(''); // Reset duration
@@ -822,6 +744,26 @@ export default function CreateEventForm({ onClose, onEventCreated }: CreateEvent
                   </ThemedText>
                 </TouchableOpacity>
               ))}
+              {/* Other option */}
+              <TouchableOpacity
+                style={[
+                  styles.typeOption,
+                  selectedCity === 'Other' && {
+                    backgroundColor: Colors[colorScheme ?? 'light'].tint,
+                    borderColor: Colors[colorScheme ?? 'light'].tint,
+                  },
+                ]}
+                onPress={() => setSelectedCity('Other')}
+              >
+                <ThemedText
+                  style={[
+                    styles.typeOptionText,
+                    selectedCity === 'Other' && { color: '#fff' },
+                  ]}
+                >
+                  📍 Other
+                </ThemedText>
+              </TouchableOpacity>
             </View>
           </ScrollView>
         </View>
@@ -830,111 +772,61 @@ export default function CreateEventForm({ onClose, onEventCreated }: CreateEvent
         <View style={styles.inputContainer}>
           <ThemedText style={styles.label}>Precise Location *</ThemedText>
           <ThemedText style={styles.sublabel}>
-            Required: Choose the exact location for your event
+            Required: Use the map to select the exact location for your event
           </ThemedText>
           
           <View style={styles.locationOptionsContainer}>
-            {/* Find Address / Geocode Button */}
-            <TouchableOpacity
-              style={[
-                styles.locationButton,
-                isGeocodingLoading && styles.locationButtonDisabled,
-                {
-                  backgroundColor: showLocationInput 
-                    ? Colors[colorScheme ?? 'light'].tint 
-                    : Colors[colorScheme ?? 'light'].background,
-                  borderColor: Colors[colorScheme ?? 'light'].tint,
-                },
-              ]}
-              onPress={handleGeocode}
-              disabled={isGeocodingLoading}
-            >
-              {isGeocodingLoading ? (
-                <ActivityIndicator size="small" color="white" />
-              ) : (
-                <IconSymbol 
-                  name="location" 
-                  size={20} 
-                  color={showLocationInput ? "white" : Colors[colorScheme ?? 'light'].tint} 
-                />
-              )}
-              <ThemedText style={[
-                styles.locationButtonText, 
-                { 
-                  color: showLocationInput 
-                    ? "white" 
-                    : Colors[colorScheme ?? 'light'].tint 
-                }
-              ]}>
-                {isGeocodingLoading 
-                  ? 'Finding...' 
-                  : showLocationInput 
-                    ? 'Find Address' 
-                    : 'Enter Address'
-                }
-              </ThemedText>
-            </TouchableOpacity>
-
             {/* Map Picker Button */}
             <TouchableOpacity
               style={[
                 styles.locationButton,
                 {
-                  backgroundColor: Colors[colorScheme ?? 'light'].background,
+                  backgroundColor: (coordinates && isMapLocation)
+                    ? Colors[colorScheme ?? 'light'].tint 
+                    : Colors[colorScheme ?? 'light'].background,
                   borderColor: Colors[colorScheme ?? 'light'].tint,
                 },
               ]}
               onPress={() => setShowLocationPicker(true)}
             >
-              <IconSymbol name="map" size={20} color={Colors[colorScheme ?? 'light'].tint} />
-              <ThemedText style={[styles.locationButtonText, { color: Colors[colorScheme ?? 'light'].tint }]}>
+              <IconSymbol 
+                name="map" 
+                size={20} 
+                color={(coordinates && isMapLocation) ? "white" : Colors[colorScheme ?? 'light'].tint} 
+              />
+              <ThemedText style={[
+                styles.locationButtonText, 
+                { 
+                  color: (coordinates && isMapLocation)
+                    ? "white" 
+                    : Colors[colorScheme ?? 'light'].tint 
+                }
+              ]}>
                 Pick on Map
               </ThemedText>
             </TouchableOpacity>
           </View>
 
-          {/* Venue/Location Input - Shows when Find Address is clicked */}
-          {showLocationInput && (
-            <View style={styles.locationInputContainer}>
-              <ThemedText style={styles.locationInputLabel}>Venue/Location Address *</ThemedText>
-              <TextInput
-                style={[
-                  styles.input,
-                  {
-                    backgroundColor: Colors[colorScheme ?? 'light'].background,
-                    borderColor: Colors[colorScheme ?? 'light'].text + '30',
-                    color: Colors[colorScheme ?? 'light'].text,
-                  },
-                ]}
-                placeholder="Enter venue name and address"
-                placeholderTextColor={Colors[colorScheme ?? 'light'].text + '70'}
-                value={location}
-                onChangeText={setLocation}
-                maxLength={200}
-                autoFocus={true}
-              />
-            </View>
-          )}
-
-          {/* Selected Location Display */}
-          {coordinates ? (
-            <View style={styles.selectedLocationContainer}>
-              <View style={styles.selectedLocationInfo}>
+          {/* Selected Location Display - Shows POI name or coordinates from map */}
+          {coordinates && (
+            <View style={styles.selectedSuggestionContainer}>
+              <View style={styles.selectedSuggestionContent}>
                 <IconSymbol name="checkmark.circle" size={16} color={Colors[colorScheme ?? 'light'].tint} />
-                <ThemedText style={styles.selectedLocationText}>
-                  📍 Location set: {coordinates.latitude.toFixed(4)}, {coordinates.longitude.toFixed(4)}
-                </ThemedText>
+                <View style={styles.selectedSuggestionTextContainer}>
+                  <ThemedText style={styles.selectedSuggestionDisplayName}>
+                    ✓ {selectedSuggestion ? selectedSuggestion.displayName : 'Location from Map'}
+                  </ThemedText>
+                  <ThemedText style={styles.selectedSuggestionFullAddress}>
+                    {selectedSuggestion 
+                      ? selectedSuggestion.fullAddress 
+                      : `📍 ${coordinates.latitude.toFixed(4)}, ${coordinates.longitude.toFixed(4)}`
+                    }
+                  </ThemedText>
+                </View>
+                <TouchableOpacity onPress={clearLocation} style={styles.clearLocationButton}>
+                  <IconSymbol name="xmark" size={14} color={Colors[colorScheme ?? 'light'].text + '70'} />
+                </TouchableOpacity>
               </View>
-              <TouchableOpacity onPress={clearLocation} style={styles.clearLocationButton}>
-                <IconSymbol name="xmark" size={14} color={Colors[colorScheme ?? 'light'].text + '70'} />
-              </TouchableOpacity>
-            </View>
-          ) : (
-            <View style={styles.warningLocationContainer}>
-              <IconSymbol name="exclamationmark.triangle" size={16} color="#ff9500" />
-              <ThemedText style={styles.warningLocationText}>
-                ⚠️ Please set a precise location using one of the options above
-              </ThemedText>
             </View>
           )}
         </View>
@@ -1002,8 +894,8 @@ export default function CreateEventForm({ onClose, onEventCreated }: CreateEvent
               { color: eventDate >= getMinimumDateTime() ? Colors[colorScheme ?? 'light'].text + '70' : "#ff9500" }
             ]}>
               {eventDate >= getMinimumDateTime() 
-                ? "✓ Event starts with enough notice time" 
-                : "⚠️ Events must start at least 8 hours from now"
+                ? "Event starts with enough notice time" 
+                : "Events must start at least 8 hours from now"
               }
             </ThemedText>
           </View>
@@ -1673,6 +1565,96 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
     marginBottom: 8,
+    color: '#666',
+  },
+  autocompleteHelper: {
+    fontSize: 12,
+    color: '#888',
+    marginBottom: 8,
+    fontStyle: 'italic',
+  },
+  autocompleteContainer: {
+    position: 'relative',
+  },
+  suggestionLoadingContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    gap: 8,
+  },
+  suggestionLoadingText: {
+    fontSize: 12,
+    color: '#666',
+  },
+  suggestionsContainer: {
+    position: 'absolute',
+    top: '100%',
+    left: 0,
+    right: 0,
+    borderWidth: 1,
+    borderColor: 'rgba(0, 0, 0, 0.1)',
+    borderRadius: 8,
+    maxHeight: 200,
+    zIndex: 1000,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 5,
+  },
+  suggestionItem: {
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderBottomWidth: 1,
+  },
+  suggestionContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  suggestionTextContainer: {
+    flex: 1,
+    minWidth: 0, // Allow text to shrink
+  },
+  suggestionDisplayName: {
+    fontSize: 14,
+    fontWeight: '600',
+    marginBottom: 2,
+  },
+  suggestionFullAddress: {
+    fontSize: 12,
+    color: '#666',
+  },
+  selectedSuggestionContainer: {
+    marginTop: 8,
+    padding: 12,
+    backgroundColor: 'rgba(76, 139, 245, 0.1)',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(76, 139, 245, 0.3)',
+  },
+  selectedSuggestionContent: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    width: '100%',
+  },
+  selectedSuggestionTextContainer: {
+    flex: 1,
+    marginLeft: 8,
+    marginRight: 8,
+  },
+  selectedSuggestionDisplayName: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#4C8BF5',
+    marginBottom: 2,
+  },
+  selectedSuggestionFullAddress: {
+    fontSize: 12,
     color: '#666',
   },
   modalOverlay: {
