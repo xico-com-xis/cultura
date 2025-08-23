@@ -105,7 +105,8 @@ export default function EventsScreen() {
   // Check if category filters are active
   const areCategoryFiltersActive = () => {
     return !(filters.selectedTypes.length === 1 && filters.selectedTypes.includes('all')) ||
-           !(filters.selectedParticipationTypes.length === 1 && filters.selectedParticipationTypes.includes('all'));
+           !(filters.selectedParticipationTypes.length === 1 && filters.selectedParticipationTypes.includes('all')) ||
+           filters.showFollowingOnly;
   };
 
   // Check if zone filters are active

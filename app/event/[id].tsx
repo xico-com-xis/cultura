@@ -2,7 +2,7 @@ import { format } from 'date-fns';
 import * as Clipboard from 'expo-clipboard';
 import * as Notifications from 'expo-notifications';
 import { router, useLocalSearchParams } from 'expo-router';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
 import { Alert, Dimensions, Linking, Modal, Pressable, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
 
 import { CachedImage } from '@/components/CachedImage';
@@ -12,6 +12,7 @@ import { IconSymbol } from '@/components/ui/IconSymbol';
 import { eventTypeIcons } from '@/constants/EventTypes';
 import { useAuth } from '@/context/AuthContext';
 import { AccessibilityFeature, useEvents } from '@/context/EventsContext';
+import { Stack } from 'expo-router';
 
 const { width: screenWidth } = Dimensions.get('window');
 
@@ -28,6 +29,7 @@ export default function EventDetailScreen() {
   const { id } = useLocalSearchParams();
   const { 
     events, 
+    filteredEvents,
     loading, 
     favoriteEvent,
     unfavoriteEvent,
@@ -40,6 +42,9 @@ export default function EventDetailScreen() {
   const [isImageModalVisible, setIsImageModalVisible] = useState(false);
   const [selectedImageIndex, setSelectedImageIndex] = useState(0);
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
+  
+  // State for navigation feedback  
+  const [navigationDirection, setNavigationDirection] = useState<'forward' | 'backward' | null>(null);
   
   // Ref for modal ScrollView
   const modalScrollRef = useRef<ScrollView>(null);
@@ -247,21 +252,15 @@ export default function EventDetailScreen() {
     }
   };
 
-  // Navigation functions for next/previous events (only future events)
+  // Navigation functions for next/previous events - use the same filtered events as the events tab
   const navigateToNextEvent = () => {
-    // Filter to only future events (events that haven't started yet)
-    const now = new Date();
-    const futureEvents = events.filter(event => {
-      if (!event.schedule || event.schedule.length === 0 || !event.schedule[0] || !event.schedule[0].date) {
-        return false; // Skip events without valid schedule
-      }
-      const eventDate = new Date(event.schedule[0].date);
-      return eventDate > now;
-    });
-    
-    const currentIndex = futureEvents.findIndex(e => String(e.id) === eventId);
-    if (currentIndex !== -1 && currentIndex < futureEvents.length - 1) {
-      const nextEvent = futureEvents[currentIndex + 1];
+    const currentIndex = filteredEvents.findIndex(e => String(e.id) === eventId);
+    if (currentIndex !== -1 && currentIndex < filteredEvents.length - 1) {
+      const nextEvent = filteredEvents[currentIndex + 1];
+      
+      setNavigationDirection('forward');
+      setTimeout(() => setNavigationDirection(null), 300);
+      
       router.replace({
         pathname: '/event/[id]',
         params: { id: nextEvent.id }
@@ -270,19 +269,13 @@ export default function EventDetailScreen() {
   };
 
   const navigateToPreviousEvent = () => {
-    // Filter to only future events (events that haven't started yet)
-    const now = new Date();
-    const futureEvents = events.filter(event => {
-      if (!event.schedule || event.schedule.length === 0 || !event.schedule[0] || !event.schedule[0].date) {
-        return false; // Skip events without valid schedule
-      }
-      const eventDate = new Date(event.schedule[0].date);
-      return eventDate > now;
-    });
-    
-    const currentIndex = futureEvents.findIndex(e => String(e.id) === eventId);
+    const currentIndex = filteredEvents.findIndex(e => String(e.id) === eventId);
     if (currentIndex > 0) {
-      const previousEvent = futureEvents[currentIndex - 1];
+      const previousEvent = filteredEvents[currentIndex - 1];
+      
+      setNavigationDirection('backward');
+      setTimeout(() => setNavigationDirection(null), 300);
+      
       router.replace({
         pathname: '/event/[id]',
         params: { id: previousEvent.id }
@@ -290,17 +283,9 @@ export default function EventDetailScreen() {
     }
   };
 
-  // Check if navigation is possible (only among future events)
-  const now = new Date();
-  const futureEvents = events.filter(event => {
-    if (!event.schedule || event.schedule.length === 0 || !event.schedule[0] || !event.schedule[0].date) {
-      return false; // Skip events without valid schedule
-    }
-    const eventDate = new Date(event.schedule[0].date);
-    return eventDate > now;
-  });
-  const currentIndex = futureEvents.findIndex(e => String(e.id) === eventId);
-  const canNavigateNext = currentIndex !== -1 && currentIndex < futureEvents.length - 1;
+  // Check if navigation is possible using the same filtered events as the events tab
+  const currentIndex = filteredEvents.findIndex(e => String(e.id) === eventId);
+  const canNavigateNext = currentIndex !== -1 && currentIndex < filteredEvents.length - 1;
   const canNavigatePrevious = currentIndex > 0;
 
   const addToCalendar = async () => {
@@ -418,7 +403,14 @@ Find more events on the Cultura app!`;
   };
   
   return (
-    <View style={styles.container}>
+    <>
+      <Stack.Screen 
+        options={{ 
+          headerShown: false,
+          animation: 'none', // Disable default navigation animation
+        }} 
+      />
+      <View style={styles.container}>
       {/* Header */}
       <ThemedView style={styles.header}>
         <View style={styles.headerLeftSection}>
@@ -435,7 +427,8 @@ Find more events on the Cultura app!`;
             <TouchableOpacity 
               style={[
                 styles.navigationButton,
-                !canNavigatePrevious && styles.navigationButtonDisabled
+                !canNavigatePrevious && styles.navigationButtonDisabled,
+                navigationDirection === 'backward' && styles.navigationButtonActive
               ]}
               onPress={navigateToPreviousEvent}
               disabled={!canNavigatePrevious}
@@ -449,7 +442,8 @@ Find more events on the Cultura app!`;
             <TouchableOpacity 
               style={[
                 styles.navigationButton,
-                !canNavigateNext && styles.navigationButtonDisabled
+                !canNavigateNext && styles.navigationButtonDisabled,
+                navigationDirection === 'forward' && styles.navigationButtonActive
               ]}
               onPress={navigateToNextEvent}
               disabled={!canNavigateNext}
@@ -470,7 +464,9 @@ Find more events on the Cultura app!`;
         </View>
       </ThemedView>
 
-      <ScrollView style={styles.scrollView}>        
+      {/* Content container */}
+      <View style={styles.animatedContent}>
+        <ScrollView style={styles.scrollView}>        
         {event.images && event.images.length > 0 ? (
           <View style={styles.imageGallery}>
             <ScrollView 
@@ -734,6 +730,7 @@ Find more events on the Cultura app!`;
           </ThemedView>
         </View>
       </ScrollView>
+      </View>
 
       {/* Full Screen Image Modal */}
       <Modal
@@ -805,7 +802,8 @@ Find more events on the Cultura app!`;
           </View>
         </View>
       </Modal>
-    </View>
+      </View>
+    </>
   );
 }
 
@@ -813,6 +811,9 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#ffffff',
+  },
+  animatedContent: {
+    flex: 1,
   },
   header: {
     flexDirection: 'row',
@@ -1107,6 +1108,10 @@ const styles = StyleSheet.create({
   },
   navigationButtonDisabled: {
     backgroundColor: '#F9F9F9',
+  },
+  navigationButtonActive: {
+    backgroundColor: 'rgba(0, 122, 255, 0.3)',
+    transform: [{ scale: 1.1 }],
   },
   shareButton: {
     width: 32,
