@@ -148,7 +148,7 @@ export default function EventDetailScreen() {
   const navigateToOrganizer = () => {
     if (event.organizer.id) {
       router.push({
-        pathname: '/organizer/[id]',
+        pathname: '/profile/[id]',
         params: { 
           id: event.organizer.id
         }
@@ -158,7 +158,7 @@ export default function EventDetailScreen() {
 
   const navigateToParticipant = (participantId: string) => {
     router.push({
-      pathname: '/organizer/[id]',
+      pathname: '/profile/[id]',
       params: { 
         id: participantId
       }

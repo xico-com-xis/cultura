@@ -66,6 +66,7 @@ export default function RootLayout() {
             <Stack.Screen name="auth/login" options={{ headerShown: false }} />
             <Stack.Screen name="event/[id]" options={{ headerShown: false }} />
             <Stack.Screen name="organizer/[id]" options={{ headerShown: false }} />
+            <Stack.Screen name="profile/[id]" options={{ headerShown: false }} />
             <Stack.Screen name="notifications-favorites" options={{ headerShown: false }} />
             <Stack.Screen name="+not-found" />
           </Stack>

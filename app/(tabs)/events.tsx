@@ -214,7 +214,7 @@ export default function EventsScreen() {
   const handleUserSelect = (userId: string) => {
     closeSearch();
     router.push({
-      pathname: '/organizer/[id]',
+      pathname: '/profile/[id]',
       params: { id: userId }
     });
   };

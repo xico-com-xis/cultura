@@ -145,7 +145,7 @@ export default function NotificationsFavoritesScreen() {
 
   const navigateToOrganizer = (organizerId: string) => {
     router.push({
-      pathname: '/organizer/[id]',
+      pathname: '/profile/[id]',
       params: { id: organizerId }
     });
   };
