@@ -1,15 +1,17 @@
 import { isAfter, isBefore } from 'date-fns';
 import * as Notifications from 'expo-notifications';
 import { router, useLocalSearchParams } from 'expo-router';
-import { useState } from 'react';
-import { Alert, FlatList, StyleSheet, TouchableOpacity, View } from 'react-native';
+import { useRef, useState } from 'react';
+import { Alert, Animated, FlatList, StyleSheet, TouchableOpacity, View } from 'react-native';
 
 import EventCard from '@/components/EventCard';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
 import { IconSymbol } from '@/components/ui/IconSymbol';
+import { Colors } from '@/constants/Colors';
 import { useAuth } from '@/context/AuthContext';
 import { Event, useEvents } from '@/context/EventsContext';
+import { useColorScheme } from '@/hooks/useColorScheme';
 
 type EventPeriod = 'future' | 'past';
 
@@ -25,6 +27,10 @@ export default function OrganizerDetailScreen() {
   } = useEvents();
   const { user } = useAuth();
   const [selectedPeriod, setSelectedPeriod] = useState<EventPeriod>('future');
+  const colorScheme = useColorScheme();
+  
+  // Animation for smooth tab transitions
+  const fadeAnim = useRef(new Animated.Value(1)).current;
   
   // Convert id to string to ensure proper comparison
   const organizerId = String(id);
@@ -53,7 +59,7 @@ export default function OrganizerDetailScreen() {
               style={styles.headerBackButton}
               onPress={() => router.back()}
             >
-              <IconSymbol name="chevron.left" size={24} color="#007AFF" />
+              <IconSymbol name="chevron.left" size={24} color={Colors[colorScheme ?? 'light'].tint} />
             </TouchableOpacity>
             <ThemedText style={styles.headerTitle}>Organizer</ThemedText>
             <View style={styles.headerSpacer} />
@@ -94,6 +100,26 @@ export default function OrganizerDetailScreen() {
       return dateB.getTime() - dateA.getTime(); // Descending for past events
     }
   });
+
+  const handlePeriodChange = (newPeriod: EventPeriod) => {
+    if (newPeriod === selectedPeriod) return;
+    
+    // Fade out
+    Animated.timing(fadeAnim, {
+      toValue: 0,
+      duration: 150,
+      useNativeDriver: true,
+    }).start(() => {
+      // Change period
+      setSelectedPeriod(newPeriod);
+      // Fade in
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 150,
+        useNativeDriver: true,
+      }).start();
+    });
+  };
 
   const navigateToEvent = (event: Event) => {
     router.push({
@@ -202,35 +228,38 @@ export default function OrganizerDetailScreen() {
             style={styles.headerBackButton}
             onPress={() => router.back()}
           >
-            <IconSymbol name="chevron.left" size={24} color="#007AFF" />
+            <IconSymbol name="chevron.left" size={24} color={Colors[colorScheme ?? 'light'].tint} />
           </TouchableOpacity>
           <ThemedText style={styles.headerTitle}>Organizer</ThemedText>
-          {user && (
-            <TouchableOpacity 
-              style={[
-                styles.followButton, 
-                isPersonFavorited(organizerId) && styles.followButtonActive
-              ]}
-              onPress={handleFavoriteToggle}
-            >
-              <IconSymbol 
-                name={isPersonFavorited(organizerId) ? "heart.fill" : "heart"} 
-                size={20} 
-                color={isPersonFavorited(organizerId) ? "#fff" : "#4C8BF5"} 
-              />
-            </TouchableOpacity>
-          )}
-          {!user && <View style={styles.headerSpacer} />}
+          <View style={styles.headerSpacer} />
         </ThemedView>
         
         <ThemedView style={styles.content}>
           {/* Organizer Info - Compact */}
           <ThemedView style={styles.organizerInfo}>
-            <IconSymbol name="person.circle.fill" size={40} color="#4C8BF5" />
+            <IconSymbol name="person.circle.fill" size={40} color={Colors[colorScheme ?? 'light'].tint} />
             <ThemedView style={styles.organizerDetails}>
-              <ThemedText style={styles.organizerName}>
-                {organizer.name}
-              </ThemedText>
+              <View style={styles.organizerNameRow}>
+                <ThemedText style={styles.organizerName}>
+                  {organizer.name}
+                </ThemedText>
+                {user && (
+                  <TouchableOpacity 
+                    style={[
+                      styles.followButton, 
+                      isPersonFavorited(organizerId) && styles.followButtonActive
+                    ]}
+                    onPress={handleFavoriteToggle}
+                  >
+                    <ThemedText style={[
+                      styles.followButtonText,
+                      isPersonFavorited(organizerId) && styles.followButtonTextActive
+                    ]}>
+                      {isPersonFavorited(organizerId) ? 'Following' : 'Follow'}
+                    </ThemedText>
+                  </TouchableOpacity>
+                )}
+              </View>
               
               {/* Contact Information - Compact */}
               {organizer.contact && organizer.allowContactSharing && (
@@ -258,26 +287,6 @@ export default function OrganizerDetailScreen() {
             </ThemedView>
           </ThemedView>
 
-          {/* Statistics - Compact */}
-          <ThemedView style={styles.statsContainer}>
-            <View style={styles.statItem}>
-              <ThemedText style={styles.statNumber}>{organizerEvents.length}</ThemedText>
-              <ThemedText style={styles.statLabel}>Total</ThemedText>
-            </View>
-            <View style={styles.statItem}>
-              <ThemedText style={styles.statNumber}>
-                {organizerEvents.filter(e => e.schedule.length > 0 && e.schedule[0] && e.schedule[0].date && isAfter(new Date(e.schedule[0].date), now)).length}
-              </ThemedText>
-              <ThemedText style={styles.statLabel}>Upcoming</ThemedText>
-            </View>
-            <View style={styles.statItem}>
-              <ThemedText style={styles.statNumber}>
-                {organizerEvents.filter(e => e.schedule.length > 0 && e.schedule[0] && e.schedule[0].date && isBefore(new Date(e.schedule[0].date), now)).length}
-              </ThemedText>
-              <ThemedText style={styles.statLabel}>Past</ThemedText>
-            </View>
-          </ThemedView>
-
           {/* Event Period Selector */}
           <ThemedView style={styles.selectorContainer}>
             <ThemedView style={styles.periodSelector}>
@@ -286,7 +295,7 @@ export default function OrganizerDetailScreen() {
                   styles.periodButton,
                   selectedPeriod === 'future' && styles.periodButtonActive
                 ]}
-                onPress={() => setSelectedPeriod('future')}
+                onPress={() => handlePeriodChange('future')}
               >
                 <ThemedText style={[
                   styles.periodButtonText,
@@ -300,7 +309,7 @@ export default function OrganizerDetailScreen() {
                   styles.periodButton,
                   selectedPeriod === 'past' && styles.periodButtonActive
                 ]}
-                onPress={() => setSelectedPeriod('past')}
+                onPress={() => handlePeriodChange('past')}
               >
                 <ThemedText style={[
                   styles.periodButtonText,
@@ -314,32 +323,35 @@ export default function OrganizerDetailScreen() {
 
           {/* Events List */}
           <ThemedView style={styles.eventsContainer}>
-            {filteredEvents.length > 0 ? (
-              <FlatList
-                data={filteredEvents}
-                renderItem={renderEventItem}
-                keyExtractor={(item) => item.id}
-                showsVerticalScrollIndicator={false}
-                contentContainerStyle={styles.eventsList}
-              />
-            ) : (
-              <ThemedView style={styles.emptyState}>
-                <IconSymbol 
-                  name="calendar.badge.exclamationmark" 
-                  size={48} 
-                  color="#999" 
+            <Animated.View style={{ opacity: fadeAnim }}>
+              {filteredEvents.length > 0 ? (
+                <FlatList
+                  key={selectedPeriod} // Add key to force re-render
+                  data={filteredEvents}
+                  renderItem={renderEventItem}
+                  keyExtractor={(item) => item.id}
+                  showsVerticalScrollIndicator={false}
+                  contentContainerStyle={styles.eventsList}
                 />
-                <ThemedText style={styles.emptyText}>
-                  No {selectedPeriod} events found
-                </ThemedText>
-                <ThemedText style={styles.emptySubtext}>
-                  {selectedPeriod === 'future' 
-                    ? 'This organizer has no upcoming events'
-                    : 'This organizer has no past events'
-                  }
-                </ThemedText>
-              </ThemedView>
-            )}
+              ) : (
+                <ThemedView style={styles.emptyState}>
+                  <IconSymbol 
+                    name="calendar.badge.exclamationmark" 
+                    size={48} 
+                    color="#999" 
+                  />
+                  <ThemedText style={styles.emptyText}>
+                    No {selectedPeriod} events found
+                  </ThemedText>
+                  <ThemedText style={styles.emptySubtext}>
+                    {selectedPeriod === 'future' 
+                      ? 'This organizer has no upcoming events'
+                      : 'This organizer has no past events'
+                    }
+                  </ThemedText>
+                </ThemedView>
+              )}
+            </Animated.View>
           </ThemedView>
         </ThemedView>
       </ThemedView>
@@ -377,18 +389,28 @@ const styles = StyleSheet.create({
     width: 40, // Same width as back button for centering
   },
   followButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
     justifyContent: 'center',
     alignItems: 'center',
-    borderWidth: 2,
-    borderColor: '#4C8BF5',
+    borderWidth: 1,
+    borderColor: Colors.light.tint,
     backgroundColor: 'transparent',
+    minWidth: 70,
+    marginLeft: 8,
   },
   followButtonActive: {
-    backgroundColor: '#4C8BF5',
-    borderColor: '#4C8BF5',
+    backgroundColor: Colors.light.tint,
+    borderColor: Colors.light.tint,
+  },
+  followButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: Colors.light.tint,
+  },
+  followButtonTextActive: {
+    color: '#FFFFFF',
   },
   content: {
     flex: 1,
@@ -406,10 +428,16 @@ const styles = StyleSheet.create({
     marginLeft: 12,
     flex: 1,
   },
+  organizerNameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 4,
+  },
   organizerName: {
     fontSize: 20,
     fontWeight: 'bold',
-    marginBottom: 4,
+    flex: 1,
   },
   contactSection: {
     marginTop: 8,
@@ -423,29 +451,6 @@ const styles = StyleSheet.create({
   contactText: {
     fontSize: 12,
     color: '#666',
-  },
-  statsContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    backgroundColor: '#f8f9fa',
-    borderRadius: 12,
-    paddingVertical: 12,
-    marginBottom: 20,
-  },
-  statItem: {
-    alignItems: 'center',
-  },
-  statNumber: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#4C8BF5',
-  },
-  statLabel: {
-    fontSize: 11,
-    color: '#666',
-    marginTop: 2,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
   },
   selectorContainer: {
     marginBottom: 16,
@@ -464,7 +469,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   periodButtonActive: {
-    backgroundColor: '#4C8BF5',
+    backgroundColor: Colors.light.tint,
   },
   periodButtonText: {
     fontSize: 14,

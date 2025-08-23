@@ -9,9 +9,11 @@ import { CachedImage } from '@/components/CachedImage';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
 import { IconSymbol } from '@/components/ui/IconSymbol';
+import { Colors } from '@/constants/Colors';
 import { eventTypeIcons } from '@/constants/EventTypes';
 import { useAuth } from '@/context/AuthContext';
 import { AccessibilityFeature, useEvents } from '@/context/EventsContext';
+import { useColorScheme } from '@/hooks/useColorScheme';
 import { Stack } from 'expo-router';
 
 const { width: screenWidth } = Dimensions.get('window');
@@ -37,6 +39,7 @@ export default function EventDetailScreen() {
     isGlobalNotificationEnabled
   } = useEvents();
   const { user } = useAuth();
+  const colorScheme = useColorScheme();
   
   // State for image modal
   const [isImageModalVisible, setIsImageModalVisible] = useState(false);
@@ -418,7 +421,7 @@ Find more events on the Cultura app!`;
             style={styles.headerBackButton}
             onPress={() => router.back()}
           >
-            <IconSymbol name="chevron.left" size={24} color="#007AFF" />
+            <IconSymbol name="chevron.left" size={24} color={Colors[colorScheme ?? 'light'].tint} />
           </TouchableOpacity>
         </View>
         <ThemedText style={styles.headerTitle}>Event Details</ThemedText>
@@ -436,7 +439,7 @@ Find more events on the Cultura app!`;
               <IconSymbol 
                 name="chevron.left" 
                 size={18} 
-                color={canNavigatePrevious ? "#007AFF" : "#C7C7CC"} 
+                color={canNavigatePrevious ? Colors[colorScheme ?? 'light'].tint : "#C7C7CC"} 
               />
             </TouchableOpacity>
             <TouchableOpacity 
@@ -451,7 +454,7 @@ Find more events on the Cultura app!`;
               <IconSymbol 
                 name="chevron.right" 
                 size={18} 
-                color={canNavigateNext ? "#007AFF" : "#C7C7CC"} 
+                color={canNavigateNext ? Colors[colorScheme ?? 'light'].tint : "#C7C7CC"} 
               />
             </TouchableOpacity>
           </View>
@@ -459,7 +462,7 @@ Find more events on the Cultura app!`;
             style={styles.shareButton}
             onPress={shareEvent}
           >
-            <IconSymbol name="square.and.arrow.up" size={18} color="#007AFF" />
+            <IconSymbol name="square.and.arrow.up" size={18} color={Colors[colorScheme ?? 'light'].tint} />
           </TouchableOpacity>
         </View>
       </ThemedView>
@@ -504,7 +507,7 @@ Find more events on the Cultura app!`;
                     key={index} 
                     style={[
                       styles.indicatorDot,
-                      { backgroundColor: index === currentImageIndex ? '#4C8BF5' : 'rgba(255,255,255,0.5)' }
+                      { backgroundColor: index === currentImageIndex ? Colors[colorScheme ?? 'light'].tint : 'rgba(255,255,255,0.5)' }
                     ]} 
                   />
                 ))}
@@ -547,7 +550,7 @@ Find more events on the Cultura app!`;
           
           <ThemedView style={styles.section}>
             <View style={styles.sectionHeader}>
-              <IconSymbol name="text.alignleft" size={20} color="#4C8BF5" />
+              <IconSymbol name="text.alignleft" size={20} color={Colors[colorScheme ?? 'light'].tint} />
               <ThemedText style={styles.sectionTitle}>About</ThemedText>
             </View>
             
@@ -555,7 +558,7 @@ Find more events on the Cultura app!`;
             <View style={styles.aboutItem}>
               <TouchableOpacity onPress={navigateToMap} disabled={!event.coordinates} style={styles.aboutClickableItem}>
                 <View style={styles.iconContainer}>
-                  <IconSymbol name="mappin" size={18} color="#4C8BF5" />
+                  <IconSymbol name="mappin" size={18} color={Colors[colorScheme ?? 'light'].tint} />
                 </View>
                 <ThemedText 
                   style={[
@@ -572,14 +575,14 @@ Find more events on the Cultura app!`;
             <View style={styles.aboutItem}>
               <View style={styles.aboutClickableItem}>
                 <TouchableOpacity style={styles.iconContainer} onPress={addToCalendar}>
-                  <IconSymbol name="calendar" size={18} color="#4C8BF5" />
+                  <IconSymbol name="calendar" size={18} color={Colors[colorScheme ?? 'light'].tint} />
                 </TouchableOpacity>
                 <ThemedText style={styles.aboutItemContent}>
                   {formatRecurringEvent(event.schedule)}
                 </ThemedText>
                 {event.schedule.length > 1 && (
                   <View style={styles.recurringBadge}>
-                    <IconSymbol name="repeat" size={10} color="#4C8BF5" />
+                    <IconSymbol name="repeat" size={10} color={Colors[colorScheme ?? 'light'].tint} />
                     <ThemedText style={styles.recurringText}>Recurring</ThemedText>
                   </View>
                 )}
@@ -590,7 +593,7 @@ Find more events on the Cultura app!`;
             <View style={styles.aboutItem}>
               <View style={styles.aboutClickableItem}>
                 <View style={styles.iconContainer}>
-                  <IconSymbol name="clock" size={18} color="#4C8BF5" />
+                  <IconSymbol name="clock" size={18} color={Colors[colorScheme ?? 'light'].tint} />
                 </View>
                 <ThemedText style={styles.aboutItemContent}>
                   {event.durationMinutes === null || event.durationMinutes === undefined
@@ -611,7 +614,7 @@ Find more events on the Cultura app!`;
                     <IconSymbol 
                       name={event.participationType === 'active' ? "person.fill" : "eye.fill"} 
                       size={18} 
-                      color="#4C8BF5" 
+                      color={Colors[colorScheme ?? 'light'].tint} 
                     />
                   </View>
                   <ThemedText style={styles.aboutItemContent}>
@@ -632,12 +635,12 @@ Find more events on the Cultura app!`;
           
           <ThemedView style={styles.section}>
             <View style={styles.sectionHeader}>
-              <IconSymbol name="person.circle" size={20} color="#4C8BF5" />
+              <IconSymbol name="person.circle" size={20} color={Colors[colorScheme ?? 'light'].tint} />
               <ThemedText style={styles.sectionTitle}>Organizer</ThemedText>
             </View>
             <TouchableOpacity onPress={navigateToOrganizer} style={styles.organizerCard}>
               <View style={styles.organizerInfo}>
-                <IconSymbol name="person.circle.fill" size={32} color="#4C8BF5" />
+                <IconSymbol name="person.circle.fill" size={32} color={Colors[colorScheme ?? 'light'].tint} />
                 <ThemedText style={[styles.sectionContent, styles.clickableText, { marginLeft: 12 }]}>
                   {event.organizer.name}
                 </ThemedText>
@@ -649,7 +652,7 @@ Find more events on the Cultura app!`;
           {event.participants && event.participants.length > 0 && (
             <ThemedView style={styles.section}>
               <View style={styles.sectionHeader}>
-                <IconSymbol name="person.2" size={20} color="#4C8BF5" />
+                <IconSymbol name="person.2" size={20} color={Colors[colorScheme ?? 'light'].tint} />
                 <ThemedText style={styles.sectionTitle}>
                   Participants ({event.participants.length})
                 </ThemedText>
@@ -662,7 +665,7 @@ Find more events on the Cultura app!`;
                     style={styles.participantItem}
                   >
                     <View style={styles.participantInfo}>
-                      <IconSymbol name="person.circle.fill" size={24} color="#4C8BF5" />
+                      <IconSymbol name="person.circle.fill" size={24} color={Colors[colorScheme ?? 'light'].tint} />
                       <ThemedText 
                         style={[styles.sectionContent, styles.clickableText, { marginLeft: 12 }]}
                       >
@@ -679,7 +682,7 @@ Find more events on the Cultura app!`;
           {event.professionals && event.professionals.length > 0 && (
             <ThemedView style={styles.section}>
               <View style={styles.sectionHeader}>
-                <IconSymbol name="person.badge.shield.checkmark" size={20} color="#4C8BF5" />
+                <IconSymbol name="person.badge.shield.checkmark" size={20} color={Colors[colorScheme ?? 'light'].tint} />
                 <ThemedText style={styles.sectionTitle}>Featured Professionals</ThemedText>
               </View>
               <View style={styles.professionalsContainer}>
@@ -696,7 +699,7 @@ Find more events on the Cultura app!`;
           {event.accessibility && event.accessibility.length > 0 && (
             <ThemedView style={styles.section}>
               <View style={styles.sectionHeader}>
-                <IconSymbol name="accessibility" size={20} color="#4C8BF5" />
+                <IconSymbol name="accessibility" size={20} color={Colors[colorScheme ?? 'light'].tint} />
                 <ThemedText style={styles.sectionTitle}>Accessibility</ThemedText>
               </View>
               <View style={styles.accessibilityContainer}>
@@ -712,7 +715,7 @@ Find more events on the Cultura app!`;
           
           <ThemedView style={styles.section}>
             <View style={styles.sectionHeader}>
-              <IconSymbol name="ticket" size={20} color="#4C8BF5" />
+              <IconSymbol name="ticket" size={20} color={Colors[colorScheme ?? 'light'].tint} />
               <ThemedText style={styles.sectionTitle}>Ticket Information</ThemedText>
             </View>
             <ThemedText style={styles.sectionContent}>
@@ -947,7 +950,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   clickableText: {
-    color: '#4C8BF5',
+    color: Colors.light.tint,
     textDecorationLine: 'underline',
   },
   scheduleItem: {
@@ -1023,7 +1026,7 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   button: {
-    backgroundColor: '#4C8BF5',
+    backgroundColor: Colors.light.tint,
     paddingVertical: 12,
     paddingHorizontal: 16,
     borderRadius: 8,
@@ -1042,29 +1045,29 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: 'transparent',
     borderWidth: 1,
-    borderColor: '#4C8BF5',
+    borderColor: Colors.light.tint,
   },
   favoriteButtonActive: {
-    backgroundColor: '#4C8BF5',
-    borderColor: '#4C8BF5',
+    backgroundColor: Colors.light.tint,
+    borderColor: Colors.light.tint,
   },
   followButton: {
     backgroundColor: 'transparent',
     borderWidth: 1,
-    borderColor: '#4C8BF5',
+    borderColor: Colors.light.tint,
     borderRadius: 20,
     paddingHorizontal: 16,
     paddingVertical: 6,
     marginLeft: 12,
   },
   followButtonActive: {
-    backgroundColor: '#4C8BF5',
-    borderColor: '#4C8BF5',
+    backgroundColor: Colors.light.tint,
+    borderColor: Colors.light.tint,
   },
   followButtonText: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#4C8BF5',
+    color: Colors.light.tint,
   },
   followButtonTextActive: {
     color: '#FFFFFF',
@@ -1080,7 +1083,7 @@ const styles = StyleSheet.create({
   },
   recurringText: {
     fontSize: 10,
-    color: '#4C8BF5',
+    color: Colors.light.tint,
     fontWeight: '500',
     marginLeft: 2,
   },
@@ -1110,7 +1113,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#F9F9F9',
   },
   navigationButtonActive: {
-    backgroundColor: 'rgba(0, 122, 255, 0.3)',
+    backgroundColor: 'rgba(10, 126, 164, 0.3)',
     transform: [{ scale: 1.1 }],
   },
   shareButton: {

@@ -7,8 +7,10 @@ import EventCard from '@/components/EventCard';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
 import { IconSymbol } from '@/components/ui/IconSymbol';
+import { Colors } from '@/constants/Colors';
 import { useAuth } from '@/context/AuthContext';
 import { Event, NotificationType, useEvents } from '@/context/EventsContext';
+import { useColorScheme } from '@/hooks/useColorScheme';
 
 type ViewMode = 'events' | 'people';
 
@@ -21,6 +23,7 @@ export default function NotificationsFavoritesScreen() {
     isGlobalNotificationEnabled 
   } = useEvents();
   const { user } = useAuth();
+  const colorScheme = useColorScheme();
   const [viewMode, setViewMode] = useState<ViewMode>('events');
   const [showNotificationSettings, setShowNotificationSettings] = useState(false);
   const slideAnim = useState(new Animated.Value(0))[0];
@@ -76,7 +79,7 @@ export default function NotificationsFavoritesScreen() {
             style={styles.headerBackButton}
             onPress={() => router.back()}
           >
-            <IconSymbol name="chevron.left" size={24} color="#007AFF" />
+            <IconSymbol name="chevron.left" size={24} color={Colors[colorScheme ?? 'light'].tint} />
           </TouchableOpacity>
           <ThemedText style={styles.headerTitle}>Notifications & Favorites</ThemedText>
           <View style={{ width: 40 }} />
@@ -100,14 +103,14 @@ export default function NotificationsFavoritesScreen() {
             style={styles.headerBackButton}
             onPress={() => router.back()}
           >
-            <IconSymbol name="chevron.left" size={24} color="#007AFF" />
+            <IconSymbol name="chevron.left" size={24} color={Colors[colorScheme ?? 'light'].tint} />
           </TouchableOpacity>
           <ThemedText style={styles.headerTitle}>Notifications & Favorites</ThemedText>
           <TouchableOpacity 
             style={styles.headerSettingsButton}
             onPress={() => setShowNotificationSettings(true)}
           >
-            <IconSymbol name="gearshape.fill" size={24} color="#007AFF" />
+            <IconSymbol name="gearshape.fill" size={24} color={Colors[colorScheme ?? 'light'].tint} />
           </TouchableOpacity>
         </ThemedView>
         <ThemedView style={styles.centerContent}>
@@ -255,7 +258,7 @@ export default function NotificationsFavoritesScreen() {
       onPress={() => navigateToOrganizer(item.id)}
     >
       <View style={styles.organizerContent}>
-        <IconSymbol name="person.circle.fill" size={40} color="#4C8BF5" />
+        <IconSymbol name="person.circle.fill" size={40} color={Colors[colorScheme ?? 'light'].tint} />
         <View style={styles.organizerText}>
           <ThemedText style={styles.organizerName}>{item.name}</ThemedText>
           <ThemedText style={styles.organizerSubtitle}>Tap to view organizer page</ThemedText>
@@ -291,14 +294,14 @@ export default function NotificationsFavoritesScreen() {
           style={styles.headerBackButton}
           onPress={() => router.back()}
         >
-          <IconSymbol name="chevron.left" size={24} color="#007AFF" />
+          <IconSymbol name="chevron.left" size={24} color={Colors[colorScheme ?? 'light'].tint} />
         </TouchableOpacity>
         <ThemedText style={styles.headerTitle}>Notifications & Favorites</ThemedText>
         <TouchableOpacity 
           style={styles.headerSettingsButton}
           onPress={() => setShowNotificationSettings(true)}
         >
-          <IconSymbol name="gearshape.fill" size={24} color="#007AFF" />
+          <IconSymbol name="gearshape.fill" size={24} color={Colors[colorScheme ?? 'light'].tint} />
         </TouchableOpacity>
       </ThemedView>
 
@@ -308,7 +311,7 @@ export default function NotificationsFavoritesScreen() {
           <TouchableOpacity
             style={[
               styles.modeButton,
-              viewMode === 'events' && styles.modeButtonActive
+              viewMode === 'events' && { backgroundColor: Colors[colorScheme ?? 'light'].tint }
             ]}
             onPress={() => setViewMode('events')}
           >
@@ -322,7 +325,7 @@ export default function NotificationsFavoritesScreen() {
           <TouchableOpacity
             style={[
               styles.modeButton,
-              viewMode === 'people' && styles.modeButtonActive
+              viewMode === 'people' && { backgroundColor: Colors[colorScheme ?? 'light'].tint }
             ]}
             onPress={() => setViewMode('people')}
           >
@@ -417,7 +420,7 @@ export default function NotificationsFavoritesScreen() {
                       {
                         backgroundColor: toggleAnims[notif.type].interpolate({
                           inputRange: [0, 1],
-                          outputRange: ['#e0e0e0', '#4C8BF5'],
+                          outputRange: ['#e0e0e0', Colors[colorScheme ?? 'light'].tint],
                         })
                       }
                     ]}
@@ -503,7 +506,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   modeButtonActive: {
-    backgroundColor: '#4C8BF5',
+    backgroundColor: Colors.light.tint,
   },
   modeButtonText: {
     fontSize: 14,
@@ -643,7 +646,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 2,
   },
   notificationToggleActive: {
-    backgroundColor: '#4C8BF5',
+    backgroundColor: Colors.light.tint,
   },
   notificationToggleThumb: {
     width: 26,
