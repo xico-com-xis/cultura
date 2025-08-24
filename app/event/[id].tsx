@@ -3,7 +3,7 @@ import * as Clipboard from 'expo-clipboard';
 import * as Notifications from 'expo-notifications';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useRef, useState, useCallback } from 'react';
-import { Alert, Dimensions, Linking, Modal, Pressable, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
+import { Alert, Dimensions, Image, Linking, Modal, Pressable, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
 
 import { CachedImage } from '@/components/CachedImage';
 import { ThemedText } from '@/components/ThemedText';
@@ -14,6 +14,7 @@ import { eventTypeIcons } from '@/constants/EventTypes';
 import { useAuth } from '@/context/AuthContext';
 import { AccessibilityFeature, useEvents } from '@/context/EventsContext';
 import { useColorScheme } from '@/hooks/useColorScheme';
+import { supabase } from '@/lib/supabase';
 import { Stack } from 'expo-router';
 
 const { width: screenWidth } = Dimensions.get('window');
@@ -49,6 +50,10 @@ export default function EventDetailScreen() {
   // State for navigation feedback  
   const [navigationDirection, setNavigationDirection] = useState<'forward' | 'backward' | null>(null);
   
+  // State for profile avatars
+  const [organizerAvatar, setOrganizerAvatar] = useState<string | null>(null);
+  const [participantAvatars, setParticipantAvatars] = useState<Record<string, string>>({});
+  
   // Ref for modal ScrollView
   const modalScrollRef = useRef<ScrollView>(null);
   
@@ -65,6 +70,13 @@ export default function EventDetailScreen() {
       }, 100);
     }
   }, [isImageModalVisible, selectedImageIndex]);
+
+  // Effect to load profile avatars when event changes
+  useEffect(() => {
+    if (event) {
+      loadProfileAvatars();
+    }
+  }, [event]);
   
   // Convert id to string to ensure proper comparison
   const eventId = String(id);
@@ -163,6 +175,49 @@ export default function EventDetailScreen() {
         id: participantId
       }
     });
+  };
+
+  // Load profile avatars for organizer and participants
+  const loadProfileAvatars = async () => {
+    if (!event) return;
+
+    try {
+      // Collect all user IDs we need avatars for
+      const userIds = [event.organizer.id];
+      if (event.participants) {
+        userIds.push(...event.participants.map(p => p.id));
+      }
+
+      // Fetch profiles from database
+      const { data: profiles, error } = await supabase
+        .from('profiles')
+        .select('id, avatar_url')
+        .in('id', userIds);
+
+      if (error) {
+        console.error('Error loading profile avatars:', error);
+        return;
+      }
+
+      if (profiles) {
+        // Set organizer avatar
+        const organizerProfile = profiles.find(p => p.id === event.organizer.id);
+        if (organizerProfile?.avatar_url) {
+          setOrganizerAvatar(organizerProfile.avatar_url);
+        }
+
+        // Set participant avatars
+        const participantAvatarMap: Record<string, string> = {};
+        profiles.forEach(profile => {
+          if (profile.avatar_url && event.participants?.some(p => p.id === profile.id)) {
+            participantAvatarMap[profile.id] = profile.avatar_url;
+          }
+        });
+        setParticipantAvatars(participantAvatarMap);
+      }
+    } catch (error) {
+      console.error('Error loading profile avatars:', error);
+    }
   };
 
   const getLocationDisplay = () => {
@@ -640,7 +695,14 @@ Find more events on the Cultura app!`;
             </View>
             <TouchableOpacity onPress={navigateToOrganizer} style={styles.organizerCard}>
               <View style={styles.organizerInfo}>
-                <IconSymbol name="person.circle.fill" size={32} color={Colors[colorScheme ?? 'light'].tint} />
+                {organizerAvatar ? (
+                  <Image 
+                    source={{ uri: organizerAvatar }} 
+                    style={styles.organizerAvatar}
+                  />
+                ) : (
+                  <IconSymbol name="person.circle.fill" size={32} color={Colors[colorScheme ?? 'light'].tint} />
+                )}
                 <ThemedText style={[styles.sectionContent, styles.clickableText, { marginLeft: 12 }]}>
                   {event.organizer.name}
                 </ThemedText>
@@ -665,7 +727,14 @@ Find more events on the Cultura app!`;
                     style={styles.participantItem}
                   >
                     <View style={styles.participantInfo}>
-                      <IconSymbol name="person.circle.fill" size={24} color={Colors[colorScheme ?? 'light'].tint} />
+                      {participantAvatars[participant.id] ? (
+                        <Image 
+                          source={{ uri: participantAvatars[participant.id] }} 
+                          style={styles.participantAvatar}
+                        />
+                      ) : (
+                        <IconSymbol name="person.circle.fill" size={24} color={Colors[colorScheme ?? 'light'].tint} />
+                      )}
                       <ThemedText 
                         style={[styles.sectionContent, styles.clickableText, { marginLeft: 12 }]}
                       >
@@ -1236,5 +1305,17 @@ const styles = StyleSheet.create({
     width: 10,
     height: 10,
     borderRadius: 5,
+  },
+  organizerAvatar: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#f0f0f0',
+  },
+  participantAvatar: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: '#f0f0f0',
   },
 });

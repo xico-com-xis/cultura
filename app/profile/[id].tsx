@@ -1,7 +1,7 @@
 import * as Notifications from 'expo-notifications';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
-import { Alert, Animated, FlatList, StyleSheet, TouchableOpacity, View } from 'react-native';
+import { Alert, Animated, FlatList, StyleSheet, TouchableOpacity, View, Image } from 'react-native';
 
 import EventCard from '@/components/EventCard';
 import { ThemedText } from '@/components/ThemedText';
@@ -275,7 +275,14 @@ export default function ProfileDetailScreen() {
           <ThemedView style={styles.content}>
           {/* Profile Info */}
           <ThemedView style={styles.profileInfo}>
-            <IconSymbol name="person.circle.fill" size={40} color={Colors[colorScheme ?? 'light'].tint} />
+            {profile.avatar_url ? (
+              <Image 
+                source={{ uri: profile.avatar_url }} 
+                style={styles.profileAvatar}
+              />
+            ) : (
+              <IconSymbol name="person.circle.fill" size={40} color={Colors[colorScheme ?? 'light'].tint} />
+            )}
             <ThemedView style={styles.profileDetails}>
               <View style={styles.profileNameRow}>
                 <ThemedText style={styles.profileName}>
@@ -499,6 +506,12 @@ const styles = StyleSheet.create({
     paddingBottom: 16,
     borderBottomWidth: 1,
     borderBottomColor: '#f0f0f0',
+  },
+  profileAvatar: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#f0f0f0',
   },
   profileDetails: {
     marginLeft: 12,

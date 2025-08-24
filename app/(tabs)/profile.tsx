@@ -1,6 +1,6 @@
 import { router } from 'expo-router';
-import { useState } from 'react';
-import { ActivityIndicator, Alert, KeyboardAvoidingView, Modal, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { useEffect, useState } from 'react';
+import { ActionSheetIOS, ActivityIndicator, Alert, Image, KeyboardAvoidingView, Modal, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
@@ -9,6 +9,8 @@ import { Colors } from '@/constants/Colors';
 import { useAuth } from '@/context/AuthContext';
 import { useEvents } from '@/context/EventsContext';
 import { useColorScheme } from '@/hooks/useColorScheme';
+import { supabase } from '@/lib/supabase';
+import { pickImage, takePhoto } from '@/utils/imageUpload';
 
 // Login Form Component
 function LoginForm() {
@@ -192,6 +194,38 @@ export default function ProfileScreen() {
   const { user, signOut } = useAuth();
   const colorScheme = useColorScheme();
   const [countryModalVisible, setCountryModalVisible] = useState(false);
+  const [avatarUri, setAvatarUri] = useState<string | null>(null);
+  const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
+
+  // Load user's avatar from profiles table
+  useEffect(() => {
+    if (user?.id) {
+      loadUserAvatar();
+    }
+  }, [user?.id]);
+
+  const loadUserAvatar = async () => {
+    try {
+      if (!user?.id) return;
+
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('avatar_url')
+        .eq('id', user.id)
+        .single();
+
+      if (error) {
+        console.log('No profile found or error loading avatar:', error);
+        return;
+      }
+
+      if (data?.avatar_url) {
+        setAvatarUri(data.avatar_url);
+      }
+    } catch (error) {
+      console.error('Error loading user avatar:', error);
+    }
+  };
 
   // Get user's created events count
   const userEventsCount = user ? events.filter(event => event.organizer.id === user.id).length : 0;
@@ -216,6 +250,180 @@ export default function ProfileScreen() {
     setCountryModalVisible(false);
   };
 
+  const uploadAvatarToSupabase = async (imageUri: string): Promise<{ success: boolean; url?: string; error?: string }> => {
+    try {
+      if (!user?.id) {
+        return { success: false, error: 'User not authenticated' };
+      }
+
+      console.log('Uploading avatar to Supabase...');
+      
+      // Create a unique filename for the avatar
+      const timestamp = Date.now();
+      const fileName = `avatar_${user.id}_${timestamp}.jpg`;
+      
+      // Convert image URI to blob/FormData for upload
+      let uploadData: any;
+      
+      if (imageUri.startsWith('file://') || imageUri.startsWith('content://')) {
+        // React Native file URI - use FormData approach
+        uploadData = new FormData();
+        uploadData.append('file', {
+          uri: imageUri,
+          type: 'image/jpeg',
+          name: fileName,
+        } as any);
+      } else {
+        // Web URI - use fetch approach
+        const response = await fetch(imageUri);
+        if (!response.ok) {
+          throw new Error(`Failed to fetch image: ${response.status}`);
+        }
+        uploadData = await response.blob();
+      }
+
+      // Upload to avatars folder in event-images bucket
+      const { data, error } = await supabase.storage
+        .from('event-images')
+        .upload(`avatars/${fileName}`, uploadData, {
+          cacheControl: '3600',
+          upsert: false,
+        });
+
+      if (error) {
+        console.error('Avatar upload error:', error);
+        return { success: false, error: error.message };
+      }
+
+      // Get the public URL
+      const { data: urlData } = supabase.storage
+        .from('event-images')
+        .getPublicUrl(`avatars/${fileName}`);
+
+      return { success: true, url: urlData.publicUrl };
+    } catch (error) {
+      console.error('Error uploading avatar:', error);
+      return { 
+        success: false, 
+        error: error instanceof Error ? error.message : 'Unknown error occurred' 
+      };
+    }
+  };
+
+  const updateUserAvatar = async (avatarUrl: string) => {
+    try {
+      if (!user?.id) {
+        throw new Error('User not authenticated');
+      }
+
+      // Update the avatar_url in the profiles table
+      const { error } = await supabase
+        .from('profiles')
+        .upsert({
+          id: user.id,
+          avatar_url: avatarUrl,
+          updated_at: new Date().toISOString(),
+        });
+
+      if (error) {
+        console.error('Error updating profile:', error);
+        throw error;
+      }
+
+      console.log('Profile updated successfully');
+    } catch (error) {
+      console.error('Error updating user avatar:', error);
+      throw error;
+    }
+  };
+
+  const handleAvatarPicker = () => {
+    if (!user) {
+      Alert.alert('Error', 'Please sign in to update your profile picture');
+      return;
+    }
+
+    if (Platform.OS === 'ios') {
+      ActionSheetIOS.showActionSheetWithOptions(
+        {
+          options: ['Cancel', 'Choose from Library', 'Take Photo'],
+          cancelButtonIndex: 0,
+        },
+        (buttonIndex) => {
+          if (buttonIndex === 1) {
+            selectAvatarFromLibrary();
+          } else if (buttonIndex === 2) {
+            takeAvatarPhoto();
+          }
+        }
+      );
+    } else {
+      Alert.alert(
+        'Select Profile Picture',
+        'Choose how you want to add your profile picture',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Choose from Library', onPress: selectAvatarFromLibrary },
+          { text: 'Take Photo', onPress: takeAvatarPhoto },
+        ]
+      );
+    }
+  };
+
+  const selectAvatarFromLibrary = async () => {
+    try {
+      const result = await pickImage();
+      if (result && !result.canceled && result.assets && result.assets[0]) {
+        const imageUri = result.assets[0].uri;
+        await uploadAndSetAvatar(imageUri);
+      }
+    } catch (error) {
+      console.error('Error selecting avatar:', error);
+      Alert.alert('Error', 'Failed to select image. Please try again.');
+    }
+  };
+
+  const takeAvatarPhoto = async () => {
+    try {
+      const result = await takePhoto();
+      if (result && !result.canceled && result.assets && result.assets[0]) {
+        const imageUri = result.assets[0].uri;
+        await uploadAndSetAvatar(imageUri);
+      }
+    } catch (error) {
+      console.error('Error taking avatar photo:', error);
+      Alert.alert('Error', 'Failed to take photo. Please try again.');
+    }
+  };
+
+  const uploadAndSetAvatar = async (imageUri: string) => {
+    setIsUploadingAvatar(true);
+    try {
+      // Upload the image
+      const uploadResult = await uploadAvatarToSupabase(imageUri);
+      
+      if (!uploadResult.success || !uploadResult.url) {
+        throw new Error(uploadResult.error || 'Upload failed');
+      }
+
+      // Update the user's profile in the database
+      await updateUserAvatar(uploadResult.url);
+
+      // Update local state
+      setAvatarUri(uploadResult.url);
+      
+      Alert.alert('Success', 'Profile picture updated successfully!');
+    } catch (error) {
+      console.error('Avatar upload/update error:', error);
+      Alert.alert(
+        'Update Failed',
+        error instanceof Error ? error.message : 'Failed to update profile picture. Please try again.'
+      );
+    } finally {
+      setIsUploadingAvatar(false);
+    }
+  };
+
   const handleSignOut = () => {
     Alert.alert(
       'Sign Out',
@@ -237,7 +445,15 @@ export default function ProfileScreen() {
   return (
     <ThemedView style={styles.container}>
       <ThemedView style={styles.header}>
-        <ThemedText type="title">Profile</ThemedText>
+        <ThemedText type="title" style={styles.headerTitle}>Profile</ThemedText>
+        {user && (
+          <TouchableOpacity 
+            style={[styles.signOutButton, { backgroundColor: '#DC2626' }]}
+            onPress={handleSignOut}
+          >
+            <IconSymbol name="rectangle.portrait.and.arrow.right" size={18} color="white" />
+          </TouchableOpacity>
+        )}
       </ThemedView>
       
       {user ? (
@@ -250,24 +466,39 @@ export default function ProfileScreen() {
             indicatorStyle="default"
           >
           <ThemedView style={styles.profileInfo}>
-            <View style={styles.userAvatarContainer}>
-              <IconSymbol 
-                name="person.crop.circle.fill" 
-                size={60} 
-                color={Colors[colorScheme ?? 'light'].tint}
-              />
-            </View>
+            <TouchableOpacity 
+              style={styles.userAvatarContainer}
+              onPress={handleAvatarPicker}
+              disabled={isUploadingAvatar}
+            >
+              {isUploadingAvatar ? (
+                <View style={styles.avatarLoadingContainer}>
+                  <ActivityIndicator size="large" color={Colors[colorScheme ?? 'light'].tint} />
+                </View>
+              ) : avatarUri ? (
+                <Image 
+                  source={{ uri: avatarUri }} 
+                  style={styles.avatarImage}
+                />
+              ) : (
+                <IconSymbol 
+                  name="person.crop.circle.fill" 
+                  size={60} 
+                  color={Colors[colorScheme ?? 'light'].tint}
+                />
+              )}
+              <View style={styles.avatarEditIcon}>
+                <IconSymbol 
+                  name="camera.fill" 
+                  size={16} 
+                  color="#fff"
+                />
+              </View>
+            </TouchableOpacity>
             <ThemedText type="title" style={styles.userName}>
               {user?.user_metadata?.displayName || 'User'}
             </ThemedText>
             <ThemedText style={styles.userEmail}>{user?.email}</ThemedText>
-            <TouchableOpacity 
-              style={[styles.signOutButton, { backgroundColor: '#DC2626' }]}
-              onPress={handleSignOut}
-            >
-              <IconSymbol name="rectangle.portrait.and.arrow.right" size={18} color="white" />
-              <ThemedText style={styles.signOutText}>Sign Out</ThemedText>
-            </TouchableOpacity>
           </ThemedView>
 
           {/* My Created Events Section - Move to top for visibility */}
@@ -436,6 +667,13 @@ const styles = StyleSheet.create({
   header: {
     marginTop: 40,
     marginBottom: 20,
+    paddingHorizontal: 16,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  headerTitle: {
+    flex: 1,
   },
   // User Profile Styles
   profileInfo: {
@@ -446,6 +684,34 @@ const styles = StyleSheet.create({
   },
   userAvatarContainer: {
     marginBottom: 12,
+    position: 'relative',
+  },
+  avatarImage: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: '#f0f0f0',
+  },
+  avatarLoadingContainer: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: '#f0f0f0',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  avatarEditIcon: {
+    position: 'absolute',
+    bottom: -2,
+    right: -2,
+    backgroundColor: Colors.light.tint,
+    borderRadius: 12,
+    width: 24,
+    height: 24,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: '#fff',
   },
   userName: {
     fontSize: 20,
@@ -457,12 +723,11 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   signOutButton: {
-    flexDirection: 'row',
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    justifyContent: 'center',
     alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 8,
-    gap: 6,
   },
   signOutText: {
     color: 'white',
