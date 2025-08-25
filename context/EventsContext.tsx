@@ -59,6 +59,9 @@ export type Organizer = {
     website?: string;
   };
   allowContactSharing?: boolean;
+  // External participant fields
+  isExternal?: boolean;
+  email?: string; // For external participants
 };
 
 // Define accessibility options
@@ -890,8 +893,11 @@ export const EventProvider: React.FC<{children: React.ReactNode}> = ({ children 
     if (dbEvent.participants && Array.isArray(dbEvent.participants)) {
       // RPC format - participants is a JSONB array
       participants = dbEvent.participants;
+    } else {
+      // If participants not included in RPC, we'll fetch them separately
+      // This will be handled in the loadEvents function
+      participants = [];
     }
-    // Manual query format would need a join to event_participants table
 
     return {
       id: dbEvent.id,
@@ -971,6 +977,70 @@ export const EventProvider: React.FC<{children: React.ReactNode}> = ({ children 
     return mergedEvents;
   };
 
+  // Fetch participants for events from event_participants table
+  const fetchEventParticipants = async (eventIds: string[]) => {
+    if (eventIds.length === 0) return {};
+    
+    try {
+      const { data: participantsData, error } = await supabase
+        .from('event_participants')
+        .select(`
+          id,
+          event_id,
+          user_id,
+          is_external,
+          external_name,
+          external_email,
+          profiles:user_id (
+            id,
+            display_name,
+            full_name,
+            avatar_url
+          )
+        `)
+        .in('event_id', eventIds);
+
+      if (error) {
+        console.error('Error fetching participants:', error);
+        return {};
+      }
+
+      // Group participants by event_id
+      const participantsByEvent: { [eventId: string]: any[] } = {};
+      
+      participantsData?.forEach((participant: any) => {
+        if (!participantsByEvent[participant.event_id]) {
+          participantsByEvent[participant.event_id] = [];
+        }
+        
+        if (participant.is_external) {
+          // External participant - use the event_participants table ID for uniqueness
+          participantsByEvent[participant.event_id].push({
+            id: `external_participant_${participant.id}`, // Use event_participants table ID
+            name: participant.external_name,
+            email: participant.external_email,
+            isExternal: true,
+            profileImage: undefined,
+          });
+        } else if (participant.profiles) {
+          // App user participant
+          participantsByEvent[participant.event_id].push({
+            id: participant.profiles.id,
+            name: participant.profiles.display_name || participant.profiles.full_name || 'Unknown User',
+            email: undefined,
+            isExternal: false,
+            profileImage: participant.profiles.avatar_url,
+          });
+        }
+      });
+
+      return participantsByEvent;
+    } catch (error) {
+      console.error('Error in fetchEventParticipants:', error);
+      return {};
+    }
+  };
+
   // Fetch events from Supabase
   const fetchEvents = async () => {
     try {
@@ -987,9 +1057,17 @@ export const EventProvider: React.FC<{children: React.ReactNode}> = ({ children 
           const userIds = [...new Set(rpcData.map((event: any) => event.created_by).filter(Boolean))] as string[];
           const userNameMap = await fetchUserDisplayNames(userIds);
           
-          // Transform events with the user name map
+          // Fetch participants for all events
+          const eventIds = rpcData.map((event: any) => event.id);
+          const participantsByEvent = await fetchEventParticipants(eventIds);
+          console.log('Debug - fetched participants by event:', participantsByEvent);
+          
+          // Transform events with the user name map and participants
           const transformedEvents: Event[] = rpcData.map((dbEvent: any) => {
             const organizerName = userNameMap[dbEvent.created_by] || 'Event Organizer';
+            // Add participants to dbEvent before transformation
+            dbEvent.participants = participantsByEvent[dbEvent.id] || [];
+            console.log(`Debug - Event ${dbEvent.id} participants:`, dbEvent.participants);
             return transformEventDataSync(dbEvent, organizerName);
           }).filter(Boolean);
           
@@ -1064,9 +1142,17 @@ export const EventProvider: React.FC<{children: React.ReactNode}> = ({ children 
           const userIds = [...new Set(rpcData.map((event: any) => event.created_by).filter(Boolean))] as string[];
           const userNameMap = await fetchUserDisplayNames(userIds);
           
-          // Transform events with the user name map
+          // Fetch participants for all events
+          const eventIds = rpcData.map((event: any) => event.id);
+          const participantsByEvent = await fetchEventParticipants(eventIds);
+          console.log('Debug - refresh fetched participants by event:', participantsByEvent);
+          
+          // Transform events with the user name map and participants
           const transformedEvents: Event[] = rpcData.map((dbEvent: any) => {
             const organizerName = userNameMap[dbEvent.created_by] || 'Event Organizer';
+            // Add participants to dbEvent before transformation
+            dbEvent.participants = participantsByEvent[dbEvent.id] || [];
+            console.log(`Debug - refresh Event ${dbEvent.id} participants:`, dbEvent.participants);
             return transformEventDataSync(dbEvent, organizerName);
           }).filter(Boolean);
           
@@ -1100,9 +1186,17 @@ export const EventProvider: React.FC<{children: React.ReactNode}> = ({ children 
         const userIds = [...new Set(eventsData.map(event => event.created_by).filter(Boolean))];
         const userNameMap = await fetchUserDisplayNames(userIds);
         
-        // Transform events with the user name map
+        // Fetch participants for all events
+        const eventIds = eventsData.map((event: any) => event.id);
+        const participantsByEvent = await fetchEventParticipants(eventIds);
+        console.log('Debug - manual refresh fetched participants by event:', participantsByEvent);
+        
+        // Transform events with the user name map and participants
         const transformedEvents = eventsData.map(dbEvent => {
           const organizerName = userNameMap[dbEvent.created_by] || 'Event Organizer';
+          // Add participants to dbEvent before transformation
+          dbEvent.participants = participantsByEvent[dbEvent.id] || [];
+          console.log(`Debug - manual refresh Event ${dbEvent.id} participants:`, dbEvent.participants);
           return transformEventDataSync(dbEvent, organizerName);
         });
         
@@ -1754,15 +1848,29 @@ export const EventProvider: React.FC<{children: React.ReactNode}> = ({ children 
         }
       }
 
-      // Insert participants
+      // Insert participants (both app users and external participants)
       if (eventData.participants && eventData.participants.length > 0) {
-        const participantPromises = eventData.participants.map(async (participant) => {
+        const participantPromises = eventData.participants.map(async (participant: any) => {
+          const insertData: any = {
+            event_id: eventRecord.id,
+            is_external: participant.isExternal || false,
+          };
+          
+          if (participant.isExternal) {
+            // External participant - use new columns
+            insertData.user_id = null; // NULL for external participants
+            insertData.external_name = participant.name;
+            insertData.external_email = participant.email || null;
+          } else {
+            // App user - use existing user_id
+            insertData.user_id = participant.id;
+            insertData.external_name = null;
+            insertData.external_email = null;
+          }
+          
           const { error } = await supabase
             .from('event_participants')
-            .insert({
-              event_id: eventRecord.id,
-              user_id: participant.id,
-            });
+            .insert(insertData);
           if (error) {
             console.error('Participant insertion error:', error);
           }

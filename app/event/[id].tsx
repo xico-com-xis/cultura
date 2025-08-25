@@ -182,11 +182,16 @@ export default function EventDetailScreen() {
     if (!event) return;
 
     try {
-      // Collect all user IDs we need avatars for
+      // Collect all user IDs we need avatars for (only app users, not external participants)
       const userIds = [event.organizer.id];
       if (event.participants) {
-        userIds.push(...event.participants.map(p => p.id));
+        // Filter out external participants since they don't have profiles in the database
+        const appUserParticipants = event.participants.filter(p => !p.isExternal);
+        userIds.push(...appUserParticipants.map(p => p.id));
       }
+
+      // Only fetch if we have valid user IDs
+      if (userIds.length === 0) return;
 
       // Fetch profiles from database
       const { data: profiles, error } = await supabase
@@ -206,10 +211,10 @@ export default function EventDetailScreen() {
           setOrganizerAvatar(organizerProfile.avatar_url);
         }
 
-        // Set participant avatars
+        // Set participant avatars (only for app users)
         const participantAvatarMap: Record<string, string> = {};
         profiles.forEach(profile => {
-          if (profile.avatar_url && event.participants?.some(p => p.id === profile.id)) {
+          if (profile.avatar_url && event.participants?.some(p => p.id === profile.id && !p.isExternal)) {
             participantAvatarMap[profile.id] = profile.avatar_url;
           }
         });
@@ -546,10 +551,12 @@ Find more events on the Cultura app!`;
                     setSelectedImageIndex(index);
                     setIsImageModalVisible(true);
                   }}
+                  activeOpacity={1}
+                  style={{ width: screenWidth }}
                 >
                   <CachedImage 
                     source={{ uri: imageUri }} 
-                    style={[styles.image, { width: screenWidth }]}
+                    style={styles.image}
                     resizeMode="cover"
                   />
                 </TouchableOpacity>
@@ -719,31 +726,81 @@ Find more events on the Cultura app!`;
                   Participants ({event.participants.length})
                 </ThemedText>
               </View>
-              <View style={styles.participantsContainer}>
-                {event.participants.map((participant, index) => (
-                  <TouchableOpacity 
-                    key={participant.id}
-                    onPress={() => navigateToParticipant(participant.id)}
-                    style={styles.participantItem}
-                  >
-                    <View style={styles.participantInfo}>
-                      {participantAvatars[participant.id] ? (
-                        <Image 
-                          source={{ uri: participantAvatars[participant.id] }} 
-                          style={styles.participantAvatar}
-                        />
-                      ) : (
-                        <IconSymbol name="person.circle.fill" size={24} color={Colors[colorScheme ?? 'light'].tint} />
-                      )}
-                      <ThemedText 
-                        style={[styles.sectionContent, styles.clickableText, { marginLeft: 12 }]}
+              <View style={{gap: 8}}>
+                {event.participants.map((participant, index) => {
+                  // Render external participants as non-clickable
+                  if (participant.isExternal) {
+                    return (
+                      <View 
+                        key={participant.id}
+                        style={{
+                          flexDirection: 'row',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          paddingVertical: 12,
+                          paddingHorizontal: 4,
+                          opacity: 0.7,
+                        }}
                       >
-                        {participant.name}
-                      </ThemedText>
-                    </View>
-                    <IconSymbol name="chevron.right" size={16} color="#C7C7CC" />
-                  </TouchableOpacity>
-                ))}
+                        <View style={{flexDirection: 'row', alignItems: 'center', flex: 1}}>
+                          <IconSymbol name="person.circle" size={24} color="#999999" />
+                          <View style={{marginLeft: 12, flex: 1}}>
+                            <ThemedText style={{fontSize: 16}}>
+                              {participant.name}
+                            </ThemedText>
+                            {participant.email && (
+                              <ThemedText style={{fontSize: 14, color: '#666666', fontStyle: 'italic'}}>
+                                {participant.email}
+                              </ThemedText>
+                            )}
+                          </View>
+                        </View>
+                        <View style={{
+                          backgroundColor: '#F0F0F0',
+                          paddingHorizontal: 8,
+                          paddingVertical: 4,
+                          borderRadius: 12,
+                        }}>
+                          <ThemedText style={{fontSize: 10, color: '#666666', fontWeight: '600'}}>
+                            External
+                          </ThemedText>
+                        </View>
+                      </View>
+                    );
+                  }
+                  
+                  // Render app users as clickable
+                  return (
+                    <TouchableOpacity 
+                      key={participant.id}
+                      onPress={() => navigateToParticipant(participant.id)}
+                      style={{
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        paddingVertical: 12,
+                        paddingHorizontal: 4,
+                      }}
+                    >
+                      <View style={{flexDirection: 'row', alignItems: 'center', flex: 1}}>
+                        {participantAvatars[participant.id] ? (
+                          <Image 
+                            source={{ uri: participantAvatars[participant.id] }} 
+                            style={styles.participantAvatar}
+                          />
+                        ) : (
+                          <IconSymbol name="person.circle.fill" size={24} color={Colors[colorScheme ?? 'light'].tint} />
+                        )}
+                        <ThemedText 
+                          style={{fontSize: 16, marginLeft: 12, color: Colors[colorScheme ?? 'light'].tint}}
+                        >
+                          {participant.name}
+                        </ThemedText>
+                      </View>
+                      <IconSymbol name="chevron.right" size={16} color="#C7C7CC" />
+                    </TouchableOpacity>
+                  );
+                })}
               </View>
             </ThemedView>
           )}
@@ -938,7 +995,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   image: {
-    width: '100%',
+    width: screenWidth,
     height: 250,
   },
   imagePlaceholder: {

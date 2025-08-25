@@ -20,7 +20,7 @@ import LocationPicker from '@/components/LocationPicker';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
 import { IconSymbol } from '@/components/ui/IconSymbol';
-import UserSearchInput from '@/components/UserSearchInput';
+import UserSearchInput, { ExtendedOrganizer } from '@/components/UserSearchInput';
 import { Colors } from '@/constants/Colors';
 import { useAuth } from '@/context/AuthContext';
 import { EventType, Organizer, TicketInfo, useEvents } from '@/context/EventsContext';
@@ -71,7 +71,7 @@ export default function CreateEventForm({ onClose, onEventCreated }: CreateEvent
   const [selectedCity, setSelectedCity] = useState(availableCities[0] || '');
   const [localImageUris, setLocalImageUris] = useState<string[]>([]); // Store local image URIs (max 5)
   const [uploadedImageUrls, setUploadedImageUrls] = useState<string[]>([]); // Store uploaded URLs
-  const [selectedParticipants, setSelectedParticipants] = useState<Organizer[]>([]); // Tagged participants
+  const [selectedParticipants, setSelectedParticipants] = useState<ExtendedOrganizer[]>([]); // Tagged participants (app + external)
   
   // Location state
   const [coordinates, setCoordinates] = useState<Coordinates | null>(null);
@@ -393,6 +393,18 @@ export default function CreateEventForm({ onClose, onEventCreated }: CreateEvent
 
       setUploadProgress('Creating event...');
 
+      // Process all participants: both app users and external participants
+      // We'll store external participants with additional metadata
+      const allParticipants: ExtendedOrganizer[] = selectedParticipants.map(participant => ({
+        id: participant.id,
+        name: participant.name,
+        email: participant.email,
+        profileImage: participant.profileImage,
+        isExternal: participant.isExternal || false,
+      }));
+
+      // No need to modify the description anymore - external participants will be in the database
+
       // Create the event
       const newEvent = {
         title: title.trim(),
@@ -401,14 +413,14 @@ export default function CreateEventForm({ onClose, onEventCreated }: CreateEvent
         location: selectedSuggestion ? selectedSuggestion.displayName : location.trim(),
         city: selectedCity,
         country: filters.selectedCountry,
-        description: description.trim(),
+        description: description.trim(), // Use original description
         organizer: {
           id: user.id,
           name: user.user_metadata?.displayName || 'User',
           profileImage: undefined,
         },
         professionals: [],
-        participants: selectedParticipants, // Include tagged participants
+        participants: allParticipants, // Include all participants with metadata
         accessibility: [],
         ticketInfo,
         participationType, // Include participation type
@@ -551,7 +563,7 @@ export default function CreateEventForm({ onClose, onEventCreated }: CreateEvent
     setLocation('');
     setLocalImageUris([]);
     setUploadedImageUrls([]);
-    setSelectedParticipants([]); // Clear participants
+    setSelectedParticipants([]); // Clear participants (app + external)
     setCoordinates(null);
     setSelectedSuggestion(null); // Clear autocomplete
     setIsMapLocation(false);
@@ -647,11 +659,11 @@ export default function CreateEventForm({ onClose, onEventCreated }: CreateEvent
         {/* Participants Search */}
         <View style={styles.inputContainer}>
           <ThemedText style={styles.label}>Tag Participants</ThemedText>
-          <ThemedText style={styles.sublabel}>Search and tag other users as participants in your event</ThemedText>
+          <ThemedText style={styles.sublabel}>Search and tag app users, or add external participants who don't have the app yet</ThemedText>
           <UserSearchInput
             selectedUsers={selectedParticipants}
             onUsersChange={setSelectedParticipants}
-            placeholder="Search users to tag as participants..."
+            placeholder="Search app users or add external participants..."
           />
         </View>
 

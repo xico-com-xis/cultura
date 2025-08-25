@@ -228,7 +228,6 @@ export default function MyEventsScreen() {
   }
 
   const totalEvents = futureEvents.length + pastEvents.length;
-  const totalOccurrences = [...futureEvents, ...pastEvents].reduce((total: number, event: Event) => total + event.schedule.length, 0);
 
   return (
     <>
@@ -239,22 +238,6 @@ export default function MyEventsScreen() {
         }} 
       />
       <ThemedView style={styles.container}>
-        <ThemedView style={styles.statsContainer}>
-          <View style={styles.statItem}>
-            <ThemedText style={styles.statNumber}>{totalEvents}</ThemedText>
-            <ThemedText style={styles.statLabel}>
-              {totalEvents === 1 ? 'Event Created' : 'Events Created'}
-            </ThemedText>
-          </View>
-          <View style={styles.statDivider} />
-          <View style={styles.statItem}>
-            <ThemedText style={styles.statNumber}>{totalOccurrences}</ThemedText>
-            <ThemedText style={styles.statLabel}>
-              Total Occurrences
-            </ThemedText>
-          </View>
-        </ThemedView>
-
         <ThemedView style={styles.content}>
           {loading ? (
             <ThemedView style={styles.emptyContainer}>
@@ -297,31 +280,6 @@ export default function MyEventsScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-  },
-  statsContainer: {
-    flexDirection: 'row',
-    paddingHorizontal: 16,
-    paddingVertical: 16,
-    backgroundColor: 'rgba(0, 0, 0, 0.02)',
-  },
-  statItem: {
-    flex: 1,
-    alignItems: 'center',
-  },
-  statNumber: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    marginBottom: 4,
-  },
-  statLabel: {
-    fontSize: 14,
-    color: '#666',
-    textAlign: 'center',
-  },
-  statDivider: {
-    width: 1,
-    backgroundColor: '#e0e0e0',
-    marginHorizontal: 16,
   },
   content: {
     flex: 1,
