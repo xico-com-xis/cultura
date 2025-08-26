@@ -111,7 +111,6 @@ type FilterState = {
   drawingMode: boolean;
   selectedCity: string | 'all';
   polygonCoords: Array<{ latitude: number; longitude: number }>;
-  savedPolygons: Array<Array<{ latitude: number; longitude: number }>>;
   shouldNavigateToMap: boolean;
   selectedCountry: string;
   showFollowingOnly: boolean;
@@ -141,12 +140,10 @@ type EventsContextType = {
   setDrawingMode: (enabled: boolean) => void;
   setSelectedCity: (city: string) => void;
   setPolygonCoords: (coords: Array<{ latitude: number; longitude: number }>) => void;
-  setSavedPolygons: (polygons: Array<Array<{ latitude: number; longitude: number }>>) => void;
   setShouldNavigateToMap: (should: boolean) => void;
   setSelectedCountry: (country: string) => void;
   setShowFollowingOnly: (enabled: boolean) => void;
   filteredEvents: Event[];
-  hasActiveTypeFilters: boolean;
   availableCities: string[];
   availableCountries: string[];
   loading: boolean;
@@ -164,594 +161,6 @@ type EventsContextType = {
 };
 
 
-// Sample event data with comprehensive information
-export const SAMPLE_EVENTS: Event[] = [
-  // PORTUGAL - Lisboa
-  { 
-    id: '1', 
-    title: 'Art Exhibition: Modern Perspectives',
-    type: 'exhibition',
-    schedule: [
-      { date: '2025-05-15T10:00:00', endDate: '2025-05-15T20:00:00' },
-      { date: '2025-05-16T10:00:00', endDate: '2025-05-16T20:00:00' },
-      { date: '2025-05-17T10:00:00', endDate: '2025-05-17T20:00:00' }
-    ],
-    location: 'Museu Nacional de Arte Antiga, Lisboa',
-    city: 'Lisboa',
-    country: 'Portugal',
-    description: 'Featuring works from local artists exploring modern themes and techniques. Curated by Maria Santos, with installations by João Silva and Ana Martins.',
-    organizer: {
-      id: 'org1',
-      name: 'Museu Nacional de Arte Antiga',
-      profileImage: 'https://example.com/caa.png',
-      contact: {
-        email: 'info@museuarteantiga.pt',
-        phone: '+351 213 912 800',
-        website: 'www.museuarteantiga.pt'
-      },
-      allowContactSharing: true
-    },
-    professionals: ['Maria Santos (Curator)', 'João Silva (Artist)', 'Ana Martins (Artist)'],
-    accessibility: ['wheelchair', 'hearing', 'parking'],
-    ticketInfo: {
-      type: 'paid',
-      price: 8.50,
-      currency: 'EUR',
-      purchaseLink: 'https://tickets.example.com/exhibition',
-      onSiteAvailable: true
-    },
-    participationType: 'audience',
-    durationMinutes: 600, // 10 hours (exhibition open time)
-    coordinates: {
-      latitude: 38.7139,
-      longitude: -9.1394,
-    },
-    images: ['https://www.bizzabo.com/wp-content/uploads/2021/09/event-marketing-examples-fundraising-gala-min.png']
-  },
-  
-  // PORTUGAL - Porto
-  { 
-    id: '2', 
-    title: 'Summer Music Festival',
-    type: 'music',
-    schedule: [
-      { date: '2025-06-20T17:00:00', endDate: '2025-06-20T23:00:00' },
-      { date: '2025-06-21T16:00:00', endDate: '2025-06-21T23:30:00' }
-    ],
-    location: 'Parque da Cidade, Porto',
-    city: 'Porto',
-    country: 'Portugal',
-    description: 'Annual music festival featuring 12 bands across two days. Headliners include The Rolling Notes and Electric Symphony.',
-    organizer: {
-      id: 'org2',
-      name: 'SoundWave Productions',
-      profileImage: 'https://example.com/soundwave.png',
-      contact: {
-        email: 'hello@soundwaveproductions.com',
-        website: 'www.soundwaveproductions.com'
-      },
-      allowContactSharing: true
-    },
-    professionals: ['DJ Martinez', 'The Rolling Notes', 'Electric Symphony', 'Sound engineer: Miguel Costa'],
-    accessibility: ['wheelchair', 'restroom', 'seating'],
-    ticketInfo: {
-      type: 'paid',
-      price: 25,
-      currency: 'EUR',
-      purchaseLink: 'https://tickets.example.com/musicfest',
-      onSiteAvailable: false
-    },
-    participationType: 'audience',
-    durationMinutes: 360, // 6 hours
-    coordinates: {
-      latitude: 41.1579,
-      longitude: -8.6291,
-    },
-    images: ['https://youthincmag.com/wp-content/uploads/2019/02/Top-10-Colege-Fests-India.jpg']
-  },
-  
-  // PORTUGAL - Coimbra
-  { 
-    id: '3', 
-    title: 'Traditional Crafts Workshop',
-    type: 'workshop',
-    schedule: [
-      { date: '2025-05-28T14:00:00', endDate: '2025-05-28T17:00:00' }
-    ],
-    location: 'Centro Cultural de Coimbra',
-    city: 'Coimbra',
-    country: 'Portugal',
-    description: 'Learn traditional crafts and cooking techniques from master artisans. Materials provided, suitable for beginners.',
-    organizer: {
-      id: 'org3',
-      name: 'Cultural Heritage Foundation',
-      profileImage: 'https://example.com/chf.png'
-    },
-    professionals: ['Luísa Ferreira (Master Artisan)', 'Carlos Duarte (Chef)'],
-    accessibility: ['wheelchair', 'parking', 'restroom'],
-    ticketInfo: {
-      type: 'free',
-      onSiteAvailable: true
-    },
-    coordinates: {
-      latitude: 40.2033,
-      longitude: -8.4103,
-    },
-    images: ['https://tripjive.com/wp-content/uploads/2024/01/Tainan-traditional-crafts-and-workshops-for-hands-on-learning-experiences.jpg']
-  },
-  
-  // SPAIN - Madrid
-  {
-    id: '4',
-    title: 'Contemporary Dance Performance',
-    type: 'dance',
-    schedule: [
-      { date: '2025-06-05T19:30:00', endDate: '2025-06-05T21:00:00' }
-    ],
-    location: 'Teatro Real, Madrid',
-    city: 'Madrid',
-    country: 'Spain',
-    description: 'An innovative dance performance combining traditional and modern techniques. Choreographed by Sofia Mendes and performed by the Municipal Dance Company.',
-    organizer: {
-      id: 'org4',
-      name: 'Teatro Real',
-      profileImage: 'https://example.com/theater.png'
-    },
-    professionals: ['Sofia Mendes (Choreographer)', 'Municipal Dance Company', 'Lighting Designer: Roberto Luz'],
-    accessibility: ['wheelchair', 'hearing', 'seating'],
-    ticketInfo: {
-      type: 'paid',
-      price: 15,
-      currency: 'EUR',
-      purchaseLink: 'https://tickets.example.com/dance',
-      onSiteAvailable: true
-    },
-    coordinates: {
-      latitude: 40.4168,
-      longitude: -3.7038,
-    },
-    images: ['https://dt7savnbjquj3.cloudfront.net/_imager/files/442108/MAK01_9eed5a99b701ba360780d44a67c674dc.jpg']
-  },
-  
-  // SPAIN - Barcelona
-  {
-    id: '5',
-    title: 'Literary Evening: Local Authors',
-    type: 'literature',
-    schedule: [
-      { date: '2025-05-22T18:00:00', endDate: '2025-05-22T20:30:00' }
-    ],
-    location: 'Biblioteca Nacional de Catalunya, Barcelona',
-    city: 'Barcelona',
-    country: 'Spain',
-    description: 'Join us for readings and discussions with local authors. Books will be available for purchase and signing.',
-    organizer: {
-      id: 'org5',
-      name: 'Friends of the Library',
-      profileImage: 'https://example.com/library.png'
-    },
-    professionals: ['Margarida Sousa (Author)', 'António Dias (Author)', 'Carolina Anjos (Moderator)'],
-    accessibility: ['wheelchair', 'hearing'],
-    ticketInfo: {
-      type: 'donation',
-      onSiteAvailable: true
-    },
-    coordinates: {
-      latitude: 41.3851,
-      longitude: 2.1734,
-    },
-    images: ['https://www.herechattanooga.com/wp-content/uploads/2025/02/ishmael-reed-event.webp.webp']
-  },
-  
-  // FRANCE - Paris
-  {
-    id: '6',
-    title: 'Photography Workshop: Street Photography',
-    type: 'workshop',
-    schedule: [
-      { date: '2025-07-10T09:00:00', endDate: '2025-07-10T17:00:00' }
-    ],
-    location: 'Centre Pompidou, Paris',
-    city: 'Paris',
-    country: 'France',
-    description: 'Master the art of street photography with professional photographer Jean-Pierre Dubois. Walk through Paris and capture the essence of urban life.',
-    organizer: {
-      id: 'org6',
-      name: 'Centre Pompidou',
-      profileImage: 'https://example.com/pompidou.png'
-    },
-    professionals: ['Jean-Pierre Dubois (Photographer)', 'Marie Claire (Assistant)'],
-    accessibility: ['wheelchair', 'restroom'],
-    ticketInfo: {
-      type: 'paid',
-      price: 45,
-      currency: 'EUR',
-      purchaseLink: 'https://tickets.example.com/photo',
-      onSiteAvailable: false
-    },
-    coordinates: {
-      latitude: 48.8606,
-      longitude: 2.3522,
-    },
-    images: ['https://tripjive.com/wp-content/uploads/2024/01/Tainan-traditional-crafts-and-workshops-for-hands-on-learning-experiences.jpg']
-  },
-  
-  // FRANCE - Lyon
-  {
-    id: '7',
-    title: 'Jazz Night at the Opera',
-    type: 'music',
-    schedule: [
-      { date: '2025-08-15T20:00:00', endDate: '2025-08-15T23:00:00' }
-    ],
-    location: 'Opéra de Lyon',
-    city: 'Lyon',
-    country: 'France',
-    description: 'Exceptional jazz evening featuring the Lyon Jazz Quartet and special guest vocalist Isabelle Moreau.',
-    organizer: {
-      id: 'org7',
-      name: 'Opéra de Lyon',
-      profileImage: 'https://example.com/opera.png'
-    },
-    professionals: ['Lyon Jazz Quartet', 'Isabelle Moreau (Vocalist)', 'Claude Bernard (Sound Engineer)'],
-    accessibility: ['wheelchair', 'hearing', 'seating'],
-    ticketInfo: {
-      type: 'paid',
-      price: 35,
-      currency: 'EUR',
-      purchaseLink: 'https://tickets.example.com/jazz',
-      onSiteAvailable: true
-    },
-    coordinates: {
-      latitude: 45.7640,
-      longitude: 4.8357,
-    },
-    images: ['https://youthincmag.com/wp-content/uploads/2019/02/Top-10-Colege-Fests-India.jpg']
-  },
-  
-  // ITALY - Roma
-  {
-    id: '8',
-    title: 'Classical Theater: Romeo and Juliet',
-    type: 'theater',
-    schedule: [
-      { date: '2025-09-12T19:00:00', endDate: '2025-09-12T22:00:00' },
-      { date: '2025-09-13T19:00:00', endDate: '2025-09-13T22:00:00' }
-    ],
-    location: 'Teatro dell\'Opera di Roma',
-    city: 'Roma',
-    country: 'Italy',
-    description: 'Shakespeare\'s timeless tragedy performed by the renowned Roma Theater Company. Directed by Alessandro Gassmann.',
-    organizer: {
-      id: 'org8',
-      name: 'Teatro dell\'Opera di Roma',
-      profileImage: 'https://example.com/opera-roma.png'
-    },
-    professionals: ['Alessandro Gassmann (Director)', 'Roma Theater Company', 'Costume Designer: Lucia Vestri'],
-    accessibility: ['wheelchair', 'hearing', 'seating'],
-    ticketInfo: {
-      type: 'paid',
-      price: 28,
-      currency: 'EUR',
-      purchaseLink: 'https://tickets.example.com/romeo',
-      onSiteAvailable: true
-    },
-    coordinates: {
-      latitude: 41.9028,
-      longitude: 12.4964,
-    },
-    images: ['https://dt7savnbjquj3.cloudfront.net/_imager/files/442108/MAK01_9eed5a99b701ba360780d44a67c674dc.jpg']
-  },
-  
-  // ITALY - Milano
-  {
-    id: '9',
-    title: 'Fashion Design Exhibition',
-    type: 'exhibition',
-    schedule: [
-      { date: '2025-09-20T10:00:00', endDate: '2025-09-20T19:00:00' },
-      { date: '2025-09-21T10:00:00', endDate: '2025-09-21T19:00:00' },
-      { date: '2025-09-22T10:00:00', endDate: '2025-09-22T19:00:00' }
-    ],
-    location: 'Palazzo Reale, Milano',
-    city: 'Milano',
-    country: 'Italy',
-    description: 'Explore 50 years of Italian fashion design. From Versace to Prada, discover the evolution of Italian style.',
-    organizer: {
-      id: 'org9',
-      name: 'Palazzo Reale',
-      profileImage: 'https://example.com/palazzo.png'
-    },
-    professionals: ['Francesca Alfano Miglietti (Curator)', 'Roberto Capucci (Featured Designer)'],
-    accessibility: ['wheelchair', 'hearing', 'parking', 'restroom'],
-    ticketInfo: {
-      type: 'paid',
-      price: 12,
-      currency: 'EUR',
-      purchaseLink: 'https://tickets.example.com/fashion',
-      onSiteAvailable: true
-    },
-    coordinates: {
-      latitude: 45.4642,
-      longitude: 9.1900,
-    },
-    images: ['']
-  },
-  
-  // GERMANY - Berlin
-  {
-    id: '10',
-    title: 'Electronic Music Festival',
-    type: 'festival',
-    schedule: [
-      { date: '2025-08-25T14:00:00', endDate: '2025-08-26T06:00:00' }
-    ],
-    location: 'Tempelhof Airport, Berlin',
-    city: 'Berlin',
-    country: 'Germany',
-    description: 'Two-day electronic music festival featuring top DJs from around the world. 6 stages, 48 hours of continuous music.',
-    organizer: {
-      id: 'org10',
-      name: 'Berlin Electronic',
-      profileImage: 'https://example.com/electronic.png'
-    },
-    professionals: ['Carl Cox', 'Nina Kraviz', 'Boris Brejcha', 'Charlotte de Witte'],
-    accessibility: ['wheelchair', 'restroom', 'seating'],
-    ticketInfo: {
-      type: 'paid',
-      price: 89,
-      currency: 'EUR',
-      purchaseLink: 'https://tickets.example.com/electronic',
-      onSiteAvailable: false
-    },
-    coordinates: {
-      latitude: 52.5200,
-      longitude: 13.4050,
-    },
-    images: ['']
-  },
-  
-  // GERMANY - München
-  {
-    id: '11',
-    title: 'Film Screening: Independent Cinema',
-    type: 'film',
-    schedule: [
-      { date: '2025-07-18T19:30:00', endDate: '2025-07-18T22:00:00' }
-    ],
-    location: 'Filmmuseum München',
-    city: 'München',
-    country: 'Germany',
-    description: 'Special screening of award-winning independent films from European directors. Q&A session with filmmakers.',
-    organizer: {
-      id: 'org11',
-      name: 'Filmmuseum München',
-      profileImage: 'https://example.com/film.png'
-    },
-    professionals: ['Hans Weingartner (Director)', 'Fatih Akin (Director)', 'Moderator: Klaus Lemke'],
-    accessibility: ['wheelchair', 'hearing'],
-    ticketInfo: {
-      type: 'paid',
-      price: 8,
-      currency: 'EUR',
-      purchaseLink: 'https://tickets.example.com/film',
-      onSiteAvailable: true
-    },
-    coordinates: {
-      latitude: 48.1351,
-      longitude: 11.5820,
-    },
-    images: ['']
-  },
-  
-  // UNITED KINGDOM - London
-  {
-    id: '12',
-    title: 'Shakespeare Festival',
-    type: 'theater',
-    schedule: [
-      { date: '2025-06-14T19:00:00', endDate: '2025-06-14T22:30:00' },
-      { date: '2025-06-15T14:00:00', endDate: '2025-06-15T17:30:00' },
-      { date: '2025-06-15T19:00:00', endDate: '2025-06-15T22:30:00' }
-    ],
-    location: 'Globe Theatre, London',
-    city: 'London',
-    country: 'United Kingdom',
-    description: 'Three-day celebration of Shakespeare\'s works. Multiple plays performed by the Royal Shakespeare Company.',
-    organizer: {
-      id: 'org12',
-      name: 'Globe Theatre',
-      profileImage: 'https://example.com/globe.png'
-    },
-    professionals: ['Royal Shakespeare Company', 'Kenneth Branagh (Guest Director)', 'Judi Dench (Special Guest)'],
-    accessibility: ['wheelchair', 'hearing', 'seating'],
-    ticketInfo: {
-      type: 'paid',
-      price: 42,
-      currency: 'GBP',
-      purchaseLink: 'https://tickets.example.com/shakespeare',
-      onSiteAvailable: true
-    },
-    coordinates: {
-      latitude: 51.5074,
-      longitude: -0.1278,
-    },
-    images: ['']
-  },
-  
-  // NETHERLANDS - Amsterdam
-  {
-    id: '13',
-    title: 'Contemporary Art Fair',
-    type: 'exhibition',
-    schedule: [
-      { date: '2025-10-05T10:00:00', endDate: '2025-10-05T20:00:00' },
-      { date: '2025-10-06T10:00:00', endDate: '2025-10-06T20:00:00' },
-      { date: '2025-10-07T10:00:00', endDate: '2025-10-07T18:00:00' }
-    ],
-    location: 'RAI Amsterdam',
-    city: 'Amsterdam',
-    country: 'Netherlands',
-    description: 'Annual contemporary art fair featuring 200+ galleries from around the world. Discover emerging and established artists.',
-    organizer: {
-      id: 'org13',
-      name: 'Art Amsterdam Foundation',
-      profileImage: 'https://example.com/artfair.png'
-    },
-    professionals: ['Various International Galleries', 'Roos Schurman (Curator)', 'Willem de Kooning Foundation'],
-    accessibility: ['wheelchair', 'hearing', 'parking', 'restroom'],
-    ticketInfo: {
-      type: 'paid',
-      price: 22,
-      currency: 'EUR',
-      purchaseLink: 'https://tickets.example.com/artfair',
-      onSiteAvailable: true
-    },
-    coordinates: {
-      latitude: 52.3676,
-      longitude: 4.9041,
-    },
-    images: ['']
-  },
-  
-  // BELGIUM - Brussels
-  {
-    id: '14',
-    title: 'International Dance Workshop',
-    type: 'workshop',
-    schedule: [
-      { date: '2025-11-12T10:00:00', endDate: '2025-11-12T18:00:00' },
-      { date: '2025-11-13T10:00:00', endDate: '2025-11-13T18:00:00' }
-    ],
-    location: 'Théâtre Royal de la Monnaie, Brussels',
-    city: 'Brussels',
-    country: 'Belgium',
-    description: 'Two-day intensive workshop with international choreographers. Learn contemporary, classical, and folk dance techniques.',
-    organizer: {
-      id: 'org14',
-      name: 'European Dance Collective',
-      profileImage: 'https://example.com/dance.png'
-    },
-    professionals: ['Anne Teresa de Keersmaeker (Choreographer)', 'Akram Khan (Guest Teacher)', 'Sidi Larbi Cherkaoui'],
-    accessibility: ['wheelchair', 'restroom'],
-    ticketInfo: {
-      type: 'paid',
-      price: 95,
-      currency: 'EUR',
-      purchaseLink: 'https://tickets.example.com/dance-workshop',
-      onSiteAvailable: false
-    },
-    coordinates: {
-      latitude: 50.8503,
-      longitude: 4.3517,
-    },
-    images: ['']
-  },
-  
-  // More PORTUGAL events
-  {
-    id: '15',
-    title: 'Fado Night in the Old Town',
-    type: 'music',
-    schedule: [
-      { date: '2025-12-03T21:00:00', endDate: '2025-12-03T23:30:00' }
-    ],
-    location: 'Casa de Fado, Lisboa',
-    city: 'Lisboa',
-    country: 'Portugal',
-    description: 'Authentic Fado performance in historic Alfama district. Traditional Portuguese music with renowned fadistas.',
-    organizer: {
-      id: 'org15',
-      name: 'Casa de Fado',
-      profileImage: 'https://example.com/fado.png'
-    },
-    professionals: ['Amália Today (Fadista)', 'Carlos do Carmo Jr. (Guitarist)', 'Teresa Salgueiro'],
-    accessibility: ['hearing'],
-    ticketInfo: {
-      type: 'paid',
-      price: 18,
-      currency: 'EUR',
-      purchaseLink: 'https://tickets.example.com/fado',
-      onSiteAvailable: true
-    },
-    coordinates: {
-      latitude: 38.7139,
-      longitude: -9.1394,
-    },
-    images: ['']
-  },
-  
-  {
-    id: '16',
-    title: 'Portuguese Tile Painting Workshop',
-    type: 'workshop',
-    schedule: [
-      { date: '2025-08-08T14:00:00', endDate: '2025-08-08T17:00:00' }
-    ],
-    location: 'Museu Nacional do Azulejo, Lisboa',
-    city: 'Lisboa',
-    country: 'Portugal',
-    description: 'Learn the traditional art of Portuguese azulejo tile painting. Create your own decorative tiles to take home.',
-    organizer: {
-      id: 'org16',
-      name: 'Museu Nacional do Azulejo',
-      profileImage: 'https://example.com/azulejo.png'
-    },
-    professionals: ['Master Ceramist João Cutileiro', 'Tile Artist Maria Keil Foundation'],
-    accessibility: ['wheelchair', 'parking', 'restroom'],
-    ticketInfo: {
-      type: 'paid',
-      price: 32,
-      currency: 'EUR',
-      purchaseLink: 'https://tickets.example.com/azulejo',
-      onSiteAvailable: true
-    },
-    coordinates: {
-      latitude: 38.7139,
-      longitude: -9.1394,
-    },
-    images: ['']
-  },
-  // Past event by SoundWave Productions for testing
-  { 
-    id: '100', 
-    title: 'Summer Music Festival 2024',
-    type: 'festival',
-    schedule: [
-      { date: '2024-07-15T18:00:00', endDate: '2024-07-15T23:00:00' },
-      { date: '2024-07-16T18:00:00', endDate: '2024-07-16T23:00:00' }
-    ],
-    location: 'Praia de Carcavelos, Lisboa',
-    city: 'Lisboa',
-    country: 'Portugal',
-    description: 'Past summer festival with amazing performances. Featured local and international artists in a beachside setting.',
-    organizer: {
-      id: 'org2',
-      name: 'SoundWave Productions',
-      profileImage: 'https://example.com/soundwave.png',
-      contact: {
-        email: 'hello@soundwaveproductions.com',
-        website: 'www.soundwaveproductions.com'
-      },
-      allowContactSharing: true
-    },
-    professionals: ['DJ Beach', 'Sunset Vibes', 'Ocean Sounds Collective'],
-    accessibility: ['wheelchair', 'restroom', 'parking'],
-    ticketInfo: {
-      type: 'paid',
-      price: 35,
-      currency: 'EUR',
-      purchaseLink: 'https://tickets.soundwave.com/summer2024',
-      onSiteAvailable: false
-    },
-    coordinates: {
-      latitude: 38.6794,
-      longitude: -9.3533,
-    },
-    images: ['']
-  }
-];
-
 
 
 const EventsContext = createContext<EventsContextType | undefined>(undefined);
@@ -760,6 +169,65 @@ export const EventProvider: React.FC<{children: React.ReactNode}> = ({ children 
   const [events, setEvents] = useState<Event[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const { user } = useAuth();
+
+    // Load events on component mount
+  useEffect(() => {
+    let isInitialized = false;
+    
+    const testConnection = async () => {
+      if (isInitialized) return;
+      isInitialized = true;
+      
+      try {
+        const { data, error } = await supabase
+          .from('events')
+          .select('count')
+          .limit(1);
+        
+        if (error) {
+          console.error('Supabase connection test failed:', error);
+        }
+      } catch (err) {
+        console.error('Supabase connection test exception:', err);
+      }
+      
+      fetchEvents();
+    };
+    
+    testConnection();
+  }, []);
+
+  // Preload images when events are loaded or updated
+  useEffect(() => {
+    if (events.length > 0) {
+      const imageUrls = events
+        .flatMap(event => event.images || [])
+        .filter((url): url is string => Boolean(url));
+      
+      if (imageUrls.length > 0) {
+        // Preload images in background without blocking UI
+        preloadImages(imageUrls).catch(error => {
+          console.warn('Image preloading failed:', error);
+        });
+      }
+    }
+  }, [events]);
+
+    // Load favorite/notification data on user login
+  useEffect(() => {
+    if (user) {
+      loadFavoriteEvents();
+      loadFavoritePeople();
+      loadGlobalNotificationSettings();
+    } else {
+      // Clear data on logout
+      setFavoriteState({
+        favoriteEvents: new Set<string>(),
+        favoritePeople: new Set<string>(),
+        globalNotificationSettings: new Set<NotificationType>(),
+      });
+    }
+  }, [user]);
   
   // Add filter state
   const [filters, setFilters] = useState<FilterState>({
@@ -769,7 +237,6 @@ export const EventProvider: React.FC<{children: React.ReactNode}> = ({ children 
     drawingMode: false,
     selectedCity: 'all',
     polygonCoords: [],
-    savedPolygons: [],
     shouldNavigateToMap: false,
     selectedCountry: 'Portugal', // Default country
     showFollowingOnly: false,
@@ -781,6 +248,9 @@ export const EventProvider: React.FC<{children: React.ReactNode}> = ({ children 
     favoritePeople: new Set<string>(),
     globalNotificationSettings: new Set<NotificationType>(),
   });
+
+
+
 
   // Function to fetch multiple user display names by user IDs (batch operation)
   const fetchUserDisplayNames = async (userIds: string[]): Promise<Record<string, string>> => {
@@ -1095,7 +565,6 @@ export const EventProvider: React.FC<{children: React.ReactNode}> = ({ children 
       
       if (eventsError) {
         console.error('Manual query failed:', eventsError);
-        setEvents(SAMPLE_EVENTS);
         return;
       }
 
@@ -1114,12 +583,9 @@ export const EventProvider: React.FC<{children: React.ReactNode}> = ({ children 
         
         console.log('Sample transformed event:', transformedEvents[0]);
         setEvents(currentEvents => mergeEventsSmartly(currentEvents, transformedEvents));
-      } else {
-        setEvents(SAMPLE_EVENTS);
       }
     } catch (error) {
       console.error('Error fetching events:', error);
-      setEvents(SAMPLE_EVENTS);
     } finally {
       setLoading(false);
     }
@@ -1213,49 +679,6 @@ export const EventProvider: React.FC<{children: React.ReactNode}> = ({ children 
     }
   };
 
-  // Load events on component mount
-  useEffect(() => {
-    let isInitialized = false;
-    
-    const testConnection = async () => {
-      if (isInitialized) return;
-      isInitialized = true;
-      
-      try {
-        const { data, error } = await supabase
-          .from('events')
-          .select('count')
-          .limit(1);
-        
-        if (error) {
-          console.error('Supabase connection test failed:', error);
-        }
-      } catch (err) {
-        console.error('Supabase connection test exception:', err);
-      }
-      
-      fetchEvents();
-    };
-    
-    testConnection();
-  }, []);
-
-  // Preload images when events are loaded or updated
-  useEffect(() => {
-    if (events.length > 0) {
-      const imageUrls = events
-        .flatMap(event => event.images || [])
-        .filter((url): url is string => Boolean(url));
-      
-      if (imageUrls.length > 0) {
-        // Preload images in background without blocking UI
-        preloadImages(imageUrls).catch(error => {
-          console.warn('Image preloading failed:', error);
-        });
-      }
-    }
-  }, [events]);
-
   // Filter update methods
   const setSelectedTypes = (types: Array<EventType | 'all'>) => {
     setFilters(prev => ({ ...prev, selectedTypes: types }));
@@ -1281,10 +704,6 @@ export const EventProvider: React.FC<{children: React.ReactNode}> = ({ children 
     setFilters(prev => ({ ...prev, polygonCoords: coords }));
   };
 
-  const setSavedPolygons = (polygons: Array<Array<{ latitude: number; longitude: number }>>) => {
-    setFilters(prev => ({ ...prev, savedPolygons: polygons }));
-  };
-
   const setShouldNavigateToMap = (should: boolean) => {
     setFilters(prev => ({ ...prev, shouldNavigateToMap: should }));
   };
@@ -1296,22 +715,6 @@ export const EventProvider: React.FC<{children: React.ReactNode}> = ({ children 
   const setShowFollowingOnly = (enabled: boolean) => {
     setFilters(prev => ({ ...prev, showFollowingOnly: enabled }));
   };
-
-  // Load favorite/notification data on user login
-  useEffect(() => {
-    if (user) {
-      loadFavoriteEvents();
-      loadFavoritePeople();
-      loadGlobalNotificationSettings();
-    } else {
-      // Clear data on logout
-      setFavoriteState({
-        favoriteEvents: new Set<string>(),
-        favoritePeople: new Set<string>(),
-        globalNotificationSettings: new Set<NotificationType>(),
-      });
-    }
-  }, [user]);
 
   const loadFavoriteEvents = async () => {
     if (!user) return;
@@ -1850,7 +1253,11 @@ export const EventProvider: React.FC<{children: React.ReactNode}> = ({ children 
 
       // Insert participants (both app users and external participants)
       if (eventData.participants && eventData.participants.length > 0) {
+        console.log('Inserting participants:', eventData.participants);
+        
         const participantPromises = eventData.participants.map(async (participant: any) => {
+          console.log('Processing participant:', participant);
+          
           const insertData: any = {
             event_id: eventRecord.id,
             is_external: participant.isExternal || false,
@@ -1861,11 +1268,22 @@ export const EventProvider: React.FC<{children: React.ReactNode}> = ({ children 
             insertData.user_id = null; // NULL for external participants
             insertData.external_name = participant.name;
             insertData.external_email = participant.email || null;
+            console.log('External participant insert data:', insertData);
           } else {
-            // App user - use existing user_id
-            insertData.user_id = participant.id;
-            insertData.external_name = null;
-            insertData.external_email = null;
+            // App user - use existing user_id, but validate it exists
+            if (!participant.id || participant.id.startsWith('external_participant_')) {
+              console.warn('Invalid app user ID for participant:', participant);
+              // Skip invalid app users or treat as external
+              insertData.user_id = null;
+              insertData.external_name = participant.name;
+              insertData.external_email = participant.email || null;
+              insertData.is_external = true;
+            } else {
+              insertData.user_id = participant.id;
+              insertData.external_name = null;
+              insertData.external_email = null;
+            }
+            console.log('App user participant insert data:', insertData);
           }
           
           const { error } = await supabase
@@ -2269,15 +1687,7 @@ export const EventProvider: React.FC<{children: React.ReactNode}> = ({ children 
       return passesTypeFilter && passesParticipationTypeFilter && passesCountryFilter && passesCityFilter && passesMapFilter && passesFollowingFilter;
     });
   }, [events, filters.selectedTypes, filters.selectedParticipationTypes, filters.selectedCountry, filters.selectedCity, filters.mapFilterEnabled, filters.polygonCoords, filters.showFollowingOnly, favoriteState.favoritePeople]);
-
-  const hasActiveTypeFilters = useMemo(() => {
-    return !(filters.selectedTypes.length === 1 && filters.selectedTypes.includes('all')) ||
-           !(filters.selectedParticipationTypes.length === 1 && filters.selectedParticipationTypes.includes('all')) ||
-           filters.selectedCity !== 'all' ||
-           filters.mapFilterEnabled ||
-           filters.showFollowingOnly;
-  }, [filters.selectedTypes, filters.selectedParticipationTypes, filters.selectedCity, filters.mapFilterEnabled, filters.showFollowingOnly]);
-
+  
   return (
     <EventsContext.Provider value={{ 
       events, 
@@ -2292,12 +1702,10 @@ export const EventProvider: React.FC<{children: React.ReactNode}> = ({ children 
       setDrawingMode,
       setSelectedCity,
       setPolygonCoords,
-      setSavedPolygons,
       setShouldNavigateToMap,
       setSelectedCountry,
       setShowFollowingOnly,
       filteredEvents,
-      hasActiveTypeFilters,
       availableCities,
       availableCountries,
       loading,
