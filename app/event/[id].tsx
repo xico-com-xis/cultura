@@ -5,6 +5,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { Alert, Dimensions, Image, Linking, Modal, Pressable, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
 
+import ClickableMentions from '../../components/ClickableMentions';
 import { CachedImage } from '@/components/CachedImage';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
@@ -688,11 +689,18 @@ Find more events on the Cultura app!`;
                 </View>
               </View>
             )}
-
-            {/* Description */}
-            <View style={styles.aboutItem}>
-              <ThemedText style={styles.sectionContent}>{event.description}</ThemedText>
+          </ThemedView>
+          
+          {/* Description Section */}
+          <ThemedView style={styles.section}>
+            <View style={styles.sectionHeader}>
+              <IconSymbol name="text.alignleft" size={20} color={Colors[colorScheme ?? 'light'].tint} />
+              <ThemedText style={styles.sectionTitle}>About</ThemedText>
             </View>
+            <ClickableMentions 
+              text={event.description} 
+              style={styles.sectionContent}
+            />
           </ThemedView>
           
           <ThemedView style={styles.section}>
@@ -717,93 +725,6 @@ Find more events on the Cultura app!`;
               <IconSymbol name="chevron.right" size={16} color="#C7C7CC" />
             </TouchableOpacity>
           </ThemedView>
-
-          {event.participants && event.participants.length > 0 && (
-            <ThemedView style={styles.section}>
-              <View style={styles.sectionHeader}>
-                <IconSymbol name="person.2" size={20} color={Colors[colorScheme ?? 'light'].tint} />
-                <ThemedText style={styles.sectionTitle}>
-                  Participants ({event.participants.length})
-                </ThemedText>
-              </View>
-              <View style={{gap: 8}}>
-                {event.participants.map((participant, index) => {
-                  // Render external participants as non-clickable
-                  if (participant.isExternal) {
-                    return (
-                      <View 
-                        key={participant.id}
-                        style={{
-                          flexDirection: 'row',
-                          alignItems: 'center',
-                          justifyContent: 'space-between',
-                          paddingVertical: 12,
-                          paddingHorizontal: 4,
-                          opacity: 0.7,
-                        }}
-                      >
-                        <View style={{flexDirection: 'row', alignItems: 'center', flex: 1}}>
-                          <IconSymbol name="person.circle" size={24} color="#999999" />
-                          <View style={{marginLeft: 12, flex: 1}}>
-                            <ThemedText style={{fontSize: 16}}>
-                              {participant.name}
-                            </ThemedText>
-                            {participant.email && (
-                              <ThemedText style={{fontSize: 14, color: '#666666', fontStyle: 'italic'}}>
-                                {participant.email}
-                              </ThemedText>
-                            )}
-                          </View>
-                        </View>
-                        <View style={{
-                          backgroundColor: '#F0F0F0',
-                          paddingHorizontal: 8,
-                          paddingVertical: 4,
-                          borderRadius: 12,
-                        }}>
-                          <ThemedText style={{fontSize: 10, color: '#666666', fontWeight: '600'}}>
-                            External
-                          </ThemedText>
-                        </View>
-                      </View>
-                    );
-                  }
-                  
-                  // Render app users as clickable
-                  return (
-                    <TouchableOpacity 
-                      key={participant.id}
-                      onPress={() => navigateToParticipant(participant.id)}
-                      style={{
-                        flexDirection: 'row',
-                        alignItems: 'center',
-                        justifyContent: 'space-between',
-                        paddingVertical: 12,
-                        paddingHorizontal: 4,
-                      }}
-                    >
-                      <View style={{flexDirection: 'row', alignItems: 'center', flex: 1}}>
-                        {participantAvatars[participant.id] ? (
-                          <Image 
-                            source={{ uri: participantAvatars[participant.id] }} 
-                            style={styles.participantAvatar}
-                          />
-                        ) : (
-                          <IconSymbol name="person.circle.fill" size={24} color={Colors[colorScheme ?? 'light'].tint} />
-                        )}
-                        <ThemedText 
-                          style={{fontSize: 16, marginLeft: 12, color: Colors[colorScheme ?? 'light'].tint}}
-                        >
-                          {participant.name}
-                        </ThemedText>
-                      </View>
-                      <IconSymbol name="chevron.right" size={16} color="#C7C7CC" />
-                    </TouchableOpacity>
-                  );
-                })}
-              </View>
-            </ThemedView>
-          )}
           
           {event.professionals && event.professionals.length > 0 && (
             <ThemedView style={styles.section}>

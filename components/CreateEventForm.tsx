@@ -420,7 +420,8 @@ export default function CreateEventForm({ onClose, onEventCreated }: CreateEvent
         location: selectedSuggestion ? selectedSuggestion.displayName : location.trim(),
         city: selectedCity,
         country: filters.selectedCountry,
-        description: cleanedDescription, // Use cleaned description without markup
+        description: description.trim(), // Keep the original markup for clickable mentions
+        displayDescription: cleanedDescription, // Store cleaned version for fallback
         organizer: {
           id: user.id,
           name: user.user_metadata?.displayName || 'User',
