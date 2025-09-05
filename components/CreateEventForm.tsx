@@ -17,10 +17,10 @@ import {
 } from 'react-native';
 
 import LocationPicker from '@/components/LocationPicker';
+import SmartTextInput, { ExtendedOrganizer } from '@/components/SmartTextInput';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
 import { IconSymbol } from '@/components/ui/IconSymbol';
-import UserSearchInput, { ExtendedOrganizer } from '@/components/UserSearchInput';
 import { Colors } from '@/constants/Colors';
 import { useAuth } from '@/context/AuthContext';
 import { EventType, Organizer, TicketInfo, useEvents } from '@/context/EventsContext';
@@ -207,8 +207,9 @@ export default function CreateEventForm({ onClose, onEventCreated }: CreateEvent
 
   // Validation and submission
   const isFormValid = () => {
+    const cleanedDesc = cleanDescriptionText(description);
     const baseValid = title.trim() !== '' && 
-           description.trim() !== '' && 
+           cleanedDesc.trim() !== '' && 
            selectedCity !== '' &&
            coordinates !== null && // Precise location is now mandatory
            localImageUris.length > 0 && // At least one image is now mandatory
@@ -290,6 +291,11 @@ export default function CreateEventForm({ onClose, onEventCreated }: CreateEvent
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<string | null>(null);
+
+  // Function to clean description text from mentions markup
+  const cleanDescriptionText = (text: string): string => {
+    return text.replace(/@\[([^\]]+)\]\([^)]+\)/g, '$1');
+  };
 
   const handleSubmit = async () => {
     if (!isFormValid()) {
@@ -403,7 +409,8 @@ export default function CreateEventForm({ onClose, onEventCreated }: CreateEvent
         isExternal: participant.isExternal || false,
       }));
 
-      // No need to modify the description anymore - external participants will be in the database
+      // Clean description text for display (remove mention markup)
+      const cleanedDescription = cleanDescriptionText(description.trim());
 
       // Create the event
       const newEvent = {
@@ -413,7 +420,7 @@ export default function CreateEventForm({ onClose, onEventCreated }: CreateEvent
         location: selectedSuggestion ? selectedSuggestion.displayName : location.trim(),
         city: selectedCity,
         country: filters.selectedCountry,
-        description: description.trim(), // Use original description
+        description: cleanedDescription, // Use cleaned description without markup
         organizer: {
           id: user.id,
           name: user.user_metadata?.displayName || 'User',
@@ -634,10 +641,22 @@ export default function CreateEventForm({ onClose, onEventCreated }: CreateEvent
           </ScrollView>
         </View>
 
-        {/* Description Input */}
+        {/* Description Input with Smart Tagging */}
         <View style={styles.inputContainer}>
           <ThemedText style={styles.label}>Description *</ThemedText>
-          <TextInput
+          <ThemedText style={styles.sublabel}>
+            Describe your event. Type '@' to tag participants (app users or external people).
+          </ThemedText>
+          <SmartTextInput
+            value={description}
+            onChangeText={setDescription}
+            onParticipantsChange={(participants) => {
+              console.log('📋 CreateEventForm - onParticipantsChange called with:', participants);
+              console.log('📋 CreateEventForm - current selectedParticipants before update:', selectedParticipants);
+              setSelectedParticipants(participants);
+              console.log('📋 CreateEventForm - selectedParticipants will be set to:', participants);
+            }}
+            placeholder="Describe your event... Type @ to tag participants"
             style={[
               styles.textArea,
               {
@@ -646,25 +665,18 @@ export default function CreateEventForm({ onClose, onEventCreated }: CreateEvent
                 color: Colors[colorScheme ?? 'light'].text,
               },
             ]}
-            placeholder="Describe your event..."
-            placeholderTextColor={Colors[colorScheme ?? 'light'].text + '70'}
-            value={description}
-            onChangeText={setDescription}
             multiline
             numberOfLines={4}
-            maxLength={500}
           />
-        </View>
-
-        {/* Participants Search */}
-        <View style={styles.inputContainer}>
-          <ThemedText style={styles.label}>Tag Participants</ThemedText>
-          <ThemedText style={styles.sublabel}>Search and tag app users, or add external participants who don't have the app yet</ThemedText>
-          <UserSearchInput
-            selectedUsers={selectedParticipants}
-            onUsersChange={setSelectedParticipants}
-            placeholder="Search app users or add external participants..."
-          />
+          {/* Participants count indicator */}
+          {selectedParticipants.length > 0 && (
+            <View style={styles.participantsIndicator}>
+              <IconSymbol name="person.2" size={16} color={Colors[colorScheme ?? 'light'].tint} />
+              <ThemedText style={[styles.participantsCountText, { color: Colors[colorScheme ?? 'light'].tint }]}>
+                {selectedParticipants.length} participant{selectedParticipants.length !== 1 ? 's' : ''} tagged
+              </ThemedText>
+            </View>
+          )}
         </View>
 
         {/* Event Images Upload */}
@@ -1883,5 +1895,20 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     borderWidth: 1,
     borderColor: '#4C8BF5',
+  },
+  participantsIndicator: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 8,
+    paddingVertical: 6,
+    paddingHorizontal: 8,
+    backgroundColor: 'rgba(76, 139, 245, 0.1)',
+    borderRadius: 12,
+    alignSelf: 'flex-start',
+    gap: 6,
+  },
+  participantsCountText: {
+    fontSize: 12,
+    fontWeight: '500',
   },
 });

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
-import uuid from 'react-native-uuid';
+import { v4 as uuidv4 } from 'react-native-uuid';
 
 import { ThemedText } from '@/components/ThemedText';
 import { IconSymbol } from '@/components/ui/IconSymbol';
@@ -161,7 +161,7 @@ export default function UserSearchInput({ selectedUsers, onUsersChange, placehol
 
                     if (!isDuplicate) {
                       const externalUser: ExtendedOrganizer = {
-                        id: uuid.v4() as string, // Generate proper UUID
+                        id: uuidv4() as string, // Generate proper UUID
                         name: searchQuery.trim(),
                         email: '',
                         isExternal: true
