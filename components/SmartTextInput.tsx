@@ -53,6 +53,8 @@ export default function SmartTextInput({
   const [mentionStart, setMentionStart] = useState(-1);
   const [mentions, setMentions] = useState<MentionData[]>([]);
   const lastKnownMentionsRef = useRef<MentionData[]>([]);
+  const [isTyping, setIsTyping] = useState(false);
+  const latestTextRef = useRef<string>('');
   const textInputRef = useRef<TextInput>(null);
 
   // Sync mentions state with value prop
@@ -281,13 +283,35 @@ export default function SmartTextInput({
     onParticipantsChange(participants);
   };
 
+  // Helper function to get the current typed text (what user is actually typing)
+  const getCurrentTypedText = () => {
+    if (mentionStart === -1) return '';
+    const currentPlainText = getPlainDisplayText(value);
+    const textAfterAt = currentPlainText.substring(mentionStart + 1, cursorPosition);
+    return textAfterAt.split(/[\s\n\t]/)[0] || '';
+  };
+
   // Handle @ detection when cursor position changes
   const handleAtDetection = (text: string, cursorPos: number) => {
+    console.log('🔍 handleAtDetection called with text:', `"${text}"`, 'cursorPos:', cursorPos);
+    console.log('🔍 latestTextRef.current:', `"${latestTextRef.current}"`);
+    
+    // Only process if this text is newer (longer or different) than what we've seen
+    if (text.length < latestTextRef.current.length) {
+      console.log('🔍 Ignoring older/shorter text');
+      return;
+    }
+    
+    latestTextRef.current = text;
+    
     const textBeforeCursor = text.substring(0, cursorPos);
+    console.log('🔍 textBeforeCursor:', `"${textBeforeCursor}"`);
     const lastAtIndex = textBeforeCursor.lastIndexOf('@');
+    console.log('🔍 lastAtIndex:', lastAtIndex);
     
     if (lastAtIndex !== -1) {
       const textAfterAt = textBeforeCursor.substring(lastAtIndex + 1);
+      console.log('🔍 textAfterAt (searchQuery):', `"${textAfterAt}"`);
       
       // Check if we're in a mention (no spaces after @)
       if (!textAfterAt.includes(' ') && !textAfterAt.includes('\n')) {
@@ -320,14 +344,28 @@ export default function SmartTextInput({
 
     let selectedUser = user;
     
-    // If creating external user, use a proper external ID format
+    // If creating external user, extract the actual typed text instead of using potentially stale searchQuery
     if (isExternal) {
+      // Get current plain text and extract what the user actually typed
+      const currentPlainText = getPlainDisplayText(value);
+      const textAfterAt = currentPlainText.substring(mentionStart + 1, cursorPosition);
+      const actualTypedName = textAfterAt.split(/[\s\n\t]/)[0] || searchQuery;
+      
+      console.log('🎯 Creating external participant with actualTypedName:', actualTypedName);
+      console.log('🎯 currentPlainText:', currentPlainText);
+      console.log('🎯 textAfterAt:', textAfterAt);
+      console.log('🎯 cursorPosition:', cursorPosition);
+      console.log('🎯 mentionStart:', mentionStart);
+      console.log('🎯 originalSearchQuery:', searchQuery);
+      console.log('🎯 actualTypedName.trim():', actualTypedName.trim());
+      
       selectedUser = {
         id: `external_participant_${uuid.v4()}`,
-        name: searchQuery.trim(),
+        name: actualTypedName.trim(), // Use the actual typed text
         isExternal: true,
         email: ''
       };
+      console.log('🎯 External selectedUser created:', selectedUser);
     }
 
     console.log('🎯 selectedUser:', selectedUser);
@@ -372,23 +410,31 @@ export default function SmartTextInput({
     // Find the actual text that needs to be replaced (from @ to current cursor or space/end)
     const beforeMention = currentPlainText.substring(0, mentionStart);
     
-    // Find where the mention text ends - look for space, newline, or end of string after mentionStart
-    let mentionEndIndex = mentionStart + 1; // Start after the @
-    while (mentionEndIndex < currentPlainText.length) {
-      const char = currentPlainText[mentionEndIndex];
-      if (char === ' ' || char === '\n' || char === '@') {
-        break;
+    // Find where the mention text ends - should be at current cursor position when user selects suggestion
+    let mentionEndIndex = cursorPosition; // Use cursor position instead of searching
+    
+    // If cursor position is not available or seems wrong, fall back to search method
+    if (mentionEndIndex <= mentionStart) {
+      mentionEndIndex = mentionStart + 1; // Start after the @
+      while (mentionEndIndex < currentPlainText.length) {
+        const char = currentPlainText[mentionEndIndex];
+        if (char === ' ' || char === '\n' || char === '@') {
+          break;
+        }
+        mentionEndIndex++;
       }
-      mentionEndIndex++;
     }
     
     const afterMention = currentPlainText.substring(mentionEndIndex);
-    const newPlainText = beforeMention + `@${selectedUser.name}` + afterMention;
-    
-    console.log('🎯 beforeMention:', beforeMention);
+    console.log('🎯 beforeMention:', `"${beforeMention}"`);
+    console.log('🎯 mentionStart:', mentionStart);
+    console.log('🎯 cursorPosition:', cursorPosition);
     console.log('🎯 mentionEndIndex:', mentionEndIndex);
-    console.log('🎯 afterMention:', afterMention);
-    console.log('🎯 newPlainText:', newPlainText);
+    console.log('🎯 afterMention:', `"${afterMention}"`);
+    console.log('🎯 selectedUser.name:', `"${selectedUser.name}"`);
+    
+    const newPlainText = beforeMention + `@${selectedUser.name}` + afterMention;
+    console.log('🎯 newPlainText:', `"${newPlainText}"`);
     
     // Now rebuild markup text by converting plain text mentions back to markup
     // This preserves the original text structure
@@ -437,6 +483,9 @@ export default function SmartTextInput({
     setShowSuggestions(false);
     setMentionStart(-1);
     setSearchQuery('');
+    
+    // Reset the latest text ref to prepare for next mention
+    latestTextRef.current = '';
 
     // Set cursor position after the mention (@name)
     const newCursorPosition = mentionStart + selectedUser.name.length + 1; // +1 for the @ symbol
@@ -469,8 +518,9 @@ export default function SmartTextInput({
           console.log('⌨️ Current value:', value);
           console.log('⌨️ mentionStart:', mentionStart);
           
-          // Handle @ detection for new text
-          handleAtDetection(plainText, cursorPosition);
+          // Handle @ detection for new text - use text length as cursor position
+          // since the actual cursor position might not be updated yet
+          handleAtDetection(plainText, plainText.length);
           
           // CRITICAL FIX: Don't just pass plainText to onChangeText 
           // because that loses all markup. Instead, preserve existing mentions
@@ -634,7 +684,7 @@ export default function SmartTextInput({
                 />
                 <View style={styles.externalDropdownContent}>
                   <ThemedText style={[styles.dropdownItemText, styles.externalDropdownText]}>
-                    Add "{searchQuery.trim()}" as external participant
+                    Add "{getCurrentTypedText() || searchQuery.trim()}" as external participant
                   </ThemedText>
                   <ThemedText style={[styles.externalDropdownSubtext, { color: Colors[colorScheme ?? 'light'].text + '60' }]}>
                     External participant (no app account)

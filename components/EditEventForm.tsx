@@ -1,8 +1,11 @@
 import DateTimePicker from '@react-native-community/datetimepicker';
+import * as ImagePicker from 'expo-image-picker';
 import { useEffect, useState } from 'react';
 import {
+    ActionSheetIOS,
     ActivityIndicator,
     Alert,
+    Image,
     Modal,
     Platform,
     Pressable,
@@ -13,17 +16,16 @@ import {
     View,
 } from 'react-native';
 
-import ImagePickerComponent from '@/components/ImagePickerComponent';
 import LocationPicker from '@/components/LocationPicker';
+import SmartTextInput, { ExtendedOrganizer } from '@/components/SmartTextInput';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
 import { IconSymbol } from '@/components/ui/IconSymbol';
-import UserSearchInput from '@/components/UserSearchInput';
 import { Colors } from '@/constants/Colors';
 import { useAuth } from '@/context/AuthContext';
-import { Event, EventType, Organizer, TicketInfo, useEvents } from '@/context/EventsContext';
+import { Event, EventType, TicketInfo, useEvents } from '@/context/EventsContext';
 import { useColorScheme } from '@/hooks/useColorScheme';
-import { Coordinates, createFullAddress, geocodeAddress, getCityDefaultCoordinates } from '@/utils/geocoding';
+import { Coordinates, createFullAddress, geocodeAddress, getCityDefaultCoordinates, LocationSuggestion } from '@/utils/geocoding';
 import { uploadImageToSupabase } from '@/utils/imageUpload';
 
 interface EditEventFormProps {
@@ -66,17 +68,17 @@ export default function EditEventForm({ event, onClose, onEventUpdated }: EditEv
   const [title, setTitle] = useState(event.title);
   const [description, setDescription] = useState(event.description);
   const [selectedType, setSelectedType] = useState<EventType>(event.type);
-  const [location, setLocation] = useState(event.location);
+  const [location, setLocation] = useState(''); // Keep for compatibility with form submission
   const [selectedCity, setSelectedCity] = useState(event.city);
-  const [localImageUri, setLocalImageUri] = useState((event.images && event.images.length > 0 ? event.images[0] : '') || ''); // Store local image URI
-  const [uploadedImageUrl, setUploadedImageUrl] = useState((event.images && event.images.length > 0 ? event.images[0] : '') || ''); // Store uploaded URL
-  const [selectedParticipants, setSelectedParticipants] = useState<Organizer[]>(event.participants || []); // Tagged participants
+  const [localImageUris, setLocalImageUris] = useState<string[]>(event.images || []); // Store local image URIs (max 5)
+  const [uploadedImageUrls, setUploadedImageUrls] = useState<string[]>(event.images || []); // Store uploaded URLs
+  const [selectedParticipants, setSelectedParticipants] = useState<ExtendedOrganizer[]>([]); // Tagged participants (app + external)
   
   // Location state - initialize with event coordinates
   const [coordinates, setCoordinates] = useState<Coordinates | null>(event.coordinates || null);
-  const [isGeocodingLoading, setIsGeocodingLoading] = useState(false);
   const [showLocationPicker, setShowLocationPicker] = useState(false);
-  const [showLocationInput, setShowLocationInput] = useState(!!event.location);
+  const [selectedSuggestion, setSelectedSuggestion] = useState<LocationSuggestion | null>(null);
+  const [isMapLocation, setIsMapLocation] = useState(false); // Track if coordinates are from map picker
   
   // Date/time state - initialize with first event date
   const [eventDate, setEventDate] = useState(() => {
@@ -134,35 +136,12 @@ export default function EditEventForm({ event, onClose, onEventUpdated }: EditEv
     return event.durationMinutes === null || event.durationMinutes === undefined;
   });
 
-  // Auto-geocode when location and city are both filled
-  useEffect(() => {
-    const autoGeocode = async () => {
-      // Only auto-geocode if we don't already have coordinates and both fields are filled
-      if (!coordinates && location.trim() && selectedCity && filters.selectedCountry && !isGeocodingLoading && showLocationInput) {
-        try {
-          setIsGeocodingLoading(true);
-          const fullAddress = createFullAddress(location.trim(), selectedCity, filters.selectedCountry);
-          console.log('Auto-geocoding:', fullAddress);
-          
-          const geocodedCoords = await geocodeAddress(fullAddress);
-          if (geocodedCoords) {
-            setCoordinates(geocodedCoords);
-            console.log('Auto-geocoding successful:', geocodedCoords);
-          } else {
-            console.log('Auto-geocoding failed, will need manual selection');
-          }
-        } catch (error) {
-          console.error('Auto-geocoding error:', error);
-        } finally {
-          setIsGeocodingLoading(false);
-        }
-      }
-    };
+  // Auto-geocode when location and city are both filled - removed old auto-geocoding logic
 
-    // Debounce the geocoding by 1 second to avoid too many requests
-    const timeoutId = setTimeout(autoGeocode, 1000);
-    return () => clearTimeout(timeoutId);
-  }, [location, selectedCity, filters.selectedCountry, coordinates, isGeocodingLoading, showLocationInput]);
+  // Debug selectedSuggestion changes
+  useEffect(() => {
+    console.log('selectedSuggestion state changed:', selectedSuggestion);
+  }, [selectedSuggestion]);
 
   // Calculate total duration in minutes
   const getTotalDurationMinutes = () => {
@@ -176,11 +155,17 @@ export default function EditEventForm({ event, onClose, onEventUpdated }: EditEv
 
   // Validation and submission
   const isFormValid = () => {
+    // Function to clean description text from mentions markup
+    const cleanDescriptionText = (text: string): string => {
+      return text.replace(/@\[([^\]]+)\]\([^)]+\)/g, '$1');
+    };
+    
+    const cleanedDesc = cleanDescriptionText(description);
     const baseValid = title.trim() !== '' && 
-           description.trim() !== '' && 
+           cleanedDesc.trim() !== '' && 
            selectedCity !== '' &&
            coordinates !== null && // Precise location is now mandatory
-           localImageUri.trim() !== '' && // Local image is now mandatory
+           localImageUris.length > 0 && // At least one image is now mandatory
            (isUndefinedDuration || durationHours.trim() !== '' || durationMinutes.trim() !== ''); // Duration is mandatory unless undefined
     
     // For editing, allow events to start in the past (existing events)
@@ -273,6 +258,103 @@ export default function EditEventForm({ event, onClose, onEventUpdated }: EditEv
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<string | null>(null);
 
+  // Custom image picker function
+  const pickImage = async () => {
+    if (localImageUris.length >= 5) {
+      Alert.alert('Maximum Images', 'You can only add up to 5 images per event.');
+      return;
+    }
+
+    try {
+      const showActionSheet = () => {
+        ActionSheetIOS.showActionSheetWithOptions(
+          {
+            options: ['Cancel', 'Take Photo', 'Choose from Library'],
+            cancelButtonIndex: 0,
+          },
+          async (buttonIndex) => {
+            if (buttonIndex === 1) {
+              // Take photo
+              const result = await ImagePicker.launchCameraAsync({
+                mediaTypes: ImagePicker.MediaTypeOptions.Images,
+                allowsEditing: true,
+                aspect: [16, 9],
+                quality: 0.8,
+              });
+
+              if (!result.canceled && result.assets[0]) {
+                setLocalImageUris([...localImageUris, result.assets[0].uri]);
+              }
+            } else if (buttonIndex === 2) {
+              // Choose from library
+              const result = await ImagePicker.launchImageLibraryAsync({
+                mediaTypes: ImagePicker.MediaTypeOptions.Images,
+                allowsEditing: true,
+                aspect: [16, 9],
+                quality: 0.8,
+              });
+
+              if (!result.canceled && result.assets[0]) {
+                setLocalImageUris([...localImageUris, result.assets[0].uri]);
+              }
+            }
+          }
+        );
+      };
+
+      if (Platform.OS === 'ios') {
+        showActionSheet();
+      } else {
+        // Android - show alert
+        Alert.alert(
+          'Select Image',
+          'Choose an option',
+          [
+            { text: 'Cancel', style: 'cancel' },
+            {
+              text: 'Take Photo',
+              onPress: async () => {
+                const result = await ImagePicker.launchCameraAsync({
+                  mediaTypes: ImagePicker.MediaTypeOptions.Images,
+                  allowsEditing: true,
+                  aspect: [16, 9],
+                  quality: 0.8,
+                });
+
+                if (!result.canceled && result.assets[0]) {
+                  setLocalImageUris([...localImageUris, result.assets[0].uri]);
+                }
+              }
+            },
+            {
+              text: 'Choose from Library',
+              onPress: async () => {
+                const result = await ImagePicker.launchImageLibraryAsync({
+                  mediaTypes: ImagePicker.MediaTypeOptions.Images,
+                  allowsEditing: true,
+                  aspect: [16, 9],
+                  quality: 0.8,
+                });
+
+                if (!result.canceled && result.assets[0]) {
+                  setLocalImageUris([...localImageUris, result.assets[0].uri]);
+                }
+              }
+            }
+          ]
+        );
+      }
+    } catch (error) {
+      console.error('Error picking image:', error);
+      Alert.alert('Error', 'Failed to select image. Please try again.');
+    }
+  };
+
+  // Function to clean description text from mentions markup
+  const cleanDescriptionText = (text: string): string => {
+    return text.replace(/@\[([^\]]+)\]\([^)]+\)/g, '$1');
+  };
+
   const handleSubmit = async () => {
     if (!isFormValid()) {
       let errorMessage = 'Please fill in all required fields';
@@ -281,8 +363,8 @@ export default function EditEventForm({ event, onClose, onEventUpdated }: EditEv
       const isDateChanged = Math.abs(eventDate.getTime() - originalFirstDate.getTime()) > 60000;
       
       if (!coordinates) {
-        errorMessage = 'Please set a precise location using "Find Address" or "Pick on Map" buttons.';
-      } else if (!localImageUri.trim()) {
+        errorMessage = 'Please set a precise location using the "Pick on Map" button.';
+      } else if (localImageUris.length === 0) {
         errorMessage = 'Please add an image for your event.';
       } else if (!isUndefinedDuration && durationHours.trim() === '' && durationMinutes.trim() === '') {
         errorMessage = 'Please specify the duration of your event or mark it as undefined.';
@@ -307,41 +389,41 @@ export default function EditEventForm({ event, onClose, onEventUpdated }: EditEv
     setIsSubmitting(true);
 
     try {
-      // Upload image first if we have a local image that's different from the existing one
-      let finalImageUrl = uploadedImageUrl; // Use existing uploaded URL if available
+      // Upload images first if we have local images that are different from existing ones
+      let finalImageUrls = [...uploadedImageUrls]; // Use existing uploaded URLs if available
       
-      if (localImageUri && localImageUri !== (event.images && event.images.length > 0 ? event.images[0] : '') && !finalImageUrl) {
-        try {
-          setUploadProgress('Uploading image...');
-          const uploadResult = await uploadImageToSupabase(localImageUri, user.id, title.trim());
-          if (uploadResult.success && uploadResult.url) {
-            finalImageUrl = uploadResult.url;
-            setUploadedImageUrl(uploadResult.url); // Store the uploaded URL
-            setUploadProgress('Updating event...');
-          } else {
-            throw new Error(uploadResult.error || 'Image upload failed');
-          }
-        } catch (uploadError) {
-          console.error('Image upload error:', uploadError);
-          
-          // Provide more specific error messages based on the error type
-          let errorMessage = 'Failed to upload image. Please try again.';
-          if (uploadError instanceof Error) {
-            if (uploadError.message.includes('timeout')) {
-              errorMessage = 'Image upload timed out. Please check your internet connection or try a smaller image.';
-            } else if (uploadError.message.includes('Network request timed out')) {
-              errorMessage = 'Network timeout. Please check your internet connection and try again.';
-            } else if (uploadError.message.includes('policy')) {
-              errorMessage = 'Permission error. Please contact support.';
+      if (localImageUris.length > 0 && finalImageUrls.length < localImageUris.length) {
+        setUploadProgress('Uploading images...');
+        
+        // Upload each new local image
+        for (let i = finalImageUrls.length; i < localImageUris.length; i++) {
+          const localUri = localImageUris[i];
+          try {
+            setUploadProgress(`Uploading image ${i + 1} of ${localImageUris.length}...`);
+            const uploadResult = await uploadImageToSupabase(localUri, user.id, title.trim());
+            if (uploadResult.success && uploadResult.url) {
+              finalImageUrls.push(uploadResult.url);
+              setUploadedImageUrls([...finalImageUrls]); // Update state
+            } else {
+              throw new Error(uploadResult.error || 'Image upload failed');
             }
+          } catch (uploadError) {
+            console.error(`Image ${i + 1} upload error:`, uploadError);
+            
+            let errorMessage = `Failed to upload image ${i + 1}. Please try again.`;
+            if (uploadError instanceof Error) {
+              if (uploadError.message.includes('timeout')) {
+                errorMessage = `Image ${i + 1} upload timed out. Please check your internet connection or try a smaller image.`;
+              } else if (uploadError.message.includes('Network request timed out')) {
+                errorMessage = `Network timeout on image ${i + 1}. Please check your internet connection and try again.`;
+              } else if (uploadError.message.includes('policy')) {
+                errorMessage = 'Permission error. Please contact support.';
+              }
+            }
+            
+            Alert.alert('Upload Error', errorMessage, [{ text: 'OK' }]);
+            return;
           }
-          
-          Alert.alert(
-            'Upload Error', 
-            errorMessage,
-            [{ text: 'OK' }]
-          );
-          return;
         }
       }
 
@@ -356,39 +438,27 @@ export default function EditEventForm({ event, onClose, onEventUpdated }: EditEv
         }),
       };
 
-      // Try to get coordinates for the event
+      // Use coordinates from map picker
       let eventCoordinates = coordinates;
       
-      // If no coordinates from map picker, try geocoding
-      if (!eventCoordinates && location.trim() && selectedCity && filters.selectedCountry) {
-        try {
-          setUploadProgress('Finding location...');
-          setIsGeocodingLoading(true);
-          const fullAddress = createFullAddress(location.trim(), selectedCity, filters.selectedCountry);
-          console.log('Attempting to geocode:', fullAddress);
-          eventCoordinates = await geocodeAddress(fullAddress);
-          
-          if (eventCoordinates) {
-            console.log('Geocoding successful:', eventCoordinates);
-          } else {
-            console.log('Geocoding failed, using city default');
-            eventCoordinates = getCityDefaultCoordinates(selectedCity);
-          }
-        } catch (error) {
-          console.error('Geocoding error:', error);
-          eventCoordinates = getCityDefaultCoordinates(selectedCity);
-        } finally {
-          setIsGeocodingLoading(false);
-          setUploadProgress('Updating event...');
-        }
-      }
-      
-      // Fallback to city coordinates if no specific location
+      // Fallback to city coordinates if no specific location selected
       if (!eventCoordinates) {
         eventCoordinates = getCityDefaultCoordinates(selectedCity);
       }
 
       setUploadProgress('Updating event...');
+
+      // Process all participants: both app users and external participants
+      const allParticipants: ExtendedOrganizer[] = selectedParticipants.map(participant => ({
+        id: participant.id,
+        name: participant.name,
+        email: participant.email,
+        profileImage: participant.profileImage,
+        isExternal: participant.isExternal || false,
+      }));
+
+      // Clean description text for display (remove mention markup)
+      const cleanedDescription = cleanDescriptionText(description.trim());
 
       // Create the updated event
       const updatedEvent = {
@@ -396,16 +466,25 @@ export default function EditEventForm({ event, onClose, onEventUpdated }: EditEv
         title: title.trim(),
         type: selectedType,
         schedule: generateRecurringDates(),
-        location: location.trim(),
+        location: selectedSuggestion ? selectedSuggestion.displayName : location.trim(),
         city: selectedCity,
         country: filters.selectedCountry,
         description: description.trim(),
-        participants: selectedParticipants, // Include tagged participants
-        participationType, // Include participation type
-        durationMinutes: getTotalDurationMinutes(), // Include duration in minutes
+        displayDescription: cleanedDescription,
+        participants: allParticipants,
+        participationType,
+        durationMinutes: getTotalDurationMinutes(),
         ticketInfo,
-        coordinates: eventCoordinates || undefined, // Convert null to undefined for type compatibility
-        images: finalImageUrl ? [finalImageUrl] : undefined, // Include the uploaded image URL as array
+        coordinates: eventCoordinates || undefined,
+        images: finalImageUrls.length > 0 ? finalImageUrls : undefined,
+        ...(selectedSuggestion && {
+          poiInfo: {
+            id: selectedSuggestion.id,
+            name: selectedSuggestion.displayName,
+            address: selectedSuggestion.fullAddress,
+            category: (selectedSuggestion as any).category || 'venue'
+          }
+        })
       };
 
       await updateEvent(event.id, updatedEvent);
@@ -502,67 +581,28 @@ export default function EditEventForm({ event, onClose, onEventUpdated }: EditEv
   };
 
   // Location-related functions
-  const handleGeocode = async () => {
-    // Show location input if not already shown
-    if (!showLocationInput) {
-      setShowLocationInput(true);
-      return;
-    }
-
-    if (!location.trim() || !selectedCity || !filters.selectedCountry) {
-      Alert.alert(
-        'Missing Information',
-        'Please fill in the venue/location address first.'
-      );
-      return;
-    }
-
-    setIsGeocodingLoading(true);
-    try {
-      const fullAddress = createFullAddress(location.trim(), selectedCity, filters.selectedCountry);
-      console.log('Manual geocoding request for:', fullAddress);
-      
-      const geocodedCoords = await geocodeAddress(fullAddress);
-      if (geocodedCoords) {
-        setCoordinates(geocodedCoords);
-        Alert.alert(
-          'Location Found!',
-          `Successfully found coordinates for your address.`,
-          [{ text: 'OK' }]
-        );
-      } else {
-        const cityCoords = getCityDefaultCoordinates(selectedCity);
-        if (cityCoords) {
-          setCoordinates(cityCoords);
-          Alert.alert(
-            'Using City Center',
-            `Could not find exact address. Using ${selectedCity} city center instead.`,
-            [{ text: 'OK' }]
-          );
-        } else {
-          Alert.alert(
-            'Geocoding Failed',
-            'Could not find coordinates for this address. You can try "Pick on Map" instead.'
-          );
-        }
-      }
-    } catch (error) {
-      console.error('Manual geocoding error:', error);
-      Alert.alert('Error', 'Failed to geocode address. Please try again.');
-    } finally {
-      setIsGeocodingLoading(false);
-    }
-  };
-
-  const handleLocationPicked = (pickedCoordinates: Coordinates) => {
+  const handleLocationPicked = (pickedCoordinates: Coordinates, venueInfo?: LocationSuggestion) => {
+    console.log('handleLocationPicked called with:', { pickedCoordinates, venueInfo });
     setCoordinates(pickedCoordinates);
-    console.log('Location picked from map:', pickedCoordinates);
+    setIsMapLocation(true); // Mark as map location
+    
+    if (venueInfo) {
+      // If venue was selected from map POI, use venue information
+      setSelectedSuggestion(venueInfo);
+      console.log('Venue picked from map:', venueInfo);
+      console.log('Setting selectedSuggestion to:', venueInfo);
+    } else {
+      // If custom location was picked, clear venue selection
+      setSelectedSuggestion(null);
+      console.log('Custom location picked from map:', pickedCoordinates);
+    }
   };
 
   const clearLocation = () => {
     setCoordinates(null);
     setLocation('');
-    setShowLocationInput(false);
+    setSelectedSuggestion(null);
+    setIsMapLocation(false);
   };
 
   return (
@@ -630,7 +670,20 @@ export default function EditEventForm({ event, onClose, onEventUpdated }: EditEv
         {/* Description Input */}
         <View style={styles.inputContainer}>
           <ThemedText style={styles.label}>Description *</ThemedText>
-          <TextInput
+          <ThemedText style={styles.sublabel}>
+            Describe your event. Type '@' to tag participants (app users or external people).
+          </ThemedText>
+          <SmartTextInput
+            value={description}
+            onChangeText={setDescription}
+            onParticipantsChange={(participants) => {
+              console.log('📋 EditEventForm - onParticipantsChange called with:', participants);
+              console.log('📋 EditEventForm - current selectedParticipants before update:', selectedParticipants);
+              setSelectedParticipants(participants);
+              console.log('📋 EditEventForm - selectedParticipants will be set to:', participants);
+            }}
+            placeholder="Describe your event... Type @ to tag participants"
+            multiline
             style={[
               styles.textArea,
               {
@@ -639,39 +692,77 @@ export default function EditEventForm({ event, onClose, onEventUpdated }: EditEv
                 color: Colors[colorScheme ?? 'light'].text,
               },
             ]}
-            placeholder="Describe your event..."
-            placeholderTextColor={Colors[colorScheme ?? 'light'].text + '70'}
-            value={description}
-            onChangeText={setDescription}
-            multiline
-            numberOfLines={4}
-            maxLength={500}
           />
+          {/* Participants count indicator */}
+          {selectedParticipants.length > 0 && (
+            <View style={styles.participantsIndicator}>
+              <IconSymbol name="person.2" size={16} color={Colors[colorScheme ?? 'light'].tint} />
+              <ThemedText style={[styles.participantsCountText, { color: Colors[colorScheme ?? 'light'].tint }]}>
+                {selectedParticipants.length} participant{selectedParticipants.length !== 1 ? 's' : ''} tagged
+              </ThemedText>
+            </View>
+          )}
         </View>
 
-        {/* Participants Search */}
-        <View style={styles.inputContainer}>
-          <ThemedText style={styles.label}>Tag Participants</ThemedText>
-          <ThemedText style={styles.sublabel}>Search and tag other users as participants in your event</ThemedText>
-          <UserSearchInput
-            selectedUsers={selectedParticipants}
-            onUsersChange={setSelectedParticipants}
-            placeholder="Search users to tag as participants..."
-          />
-        </View>
-
-        {/* Image Upload */}
+        {/* Event Images Upload */}
         {user && (
           <View style={styles.inputContainer}>
-            <ThemedText style={styles.label}>Event Image *</ThemedText>
-            <ImagePickerComponent
-              onImageSelected={setLocalImageUri}
-              currentImageUrl={localImageUri}
-              userId={user.id}
-              eventTitle={title}
-              allowRemove={true}
-              skipUpload={true}
-            />
+            <ThemedText style={styles.label}>Event Images * (Max 5)</ThemedText>
+            <ThemedText style={[styles.label, { fontSize: 14, color: '#666', marginBottom: 12 }]}>
+              Add up to 5 images to showcase your event
+            </ThemedText>
+            
+            {/* Selected Images Preview - show first */}
+            {localImageUris.length > 0 && (
+              <View style={styles.selectedImagesContainer}>
+                <ThemedText style={[styles.label, { fontSize: 14, marginBottom: 8 }]}>
+                  Selected Images ({localImageUris.length}/5)
+                </ThemedText>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                  {localImageUris.map((uri, index) => (
+                    <View key={index} style={styles.selectedImageItem}>
+                      <Image source={{ uri }} style={styles.selectedImagePreview} />
+                      <TouchableOpacity 
+                        style={[styles.removeImageButton, { top: 4, right: 4 }]}
+                        onPress={() => {
+                          const newUris = localImageUris.filter((_, i) => i !== index);
+                          setLocalImageUris(newUris);
+                        }}
+                      >
+                        <IconSymbol name="xmark.circle.fill" size={20} color="#FF3B30" />
+                      </TouchableOpacity>
+                    </View>
+                  ))}
+                </ScrollView>
+              </View>
+            )}
+            
+            {/* Add Image Button - only show when under 5 images */}
+            {localImageUris.length < 5 && (
+              <TouchableOpacity 
+                style={[
+                  styles.addImageButton,
+                  {
+                    backgroundColor: Colors[colorScheme ?? 'light'].tint,
+                    borderColor: Colors[colorScheme ?? 'light'].tint,
+                  }
+                ]} 
+                onPress={pickImage}
+              >
+                <ThemedText style={styles.addImageButtonText}>
+                  {localImageUris.length === 0 ? '+ Add Image' : '+ Add Another Image'}
+                </ThemedText>
+              </TouchableOpacity>
+            )}
+            
+            {/* Max images reached message */}
+            {localImageUris.length >= 5 && (
+              <View style={styles.maxImagesContainer}>
+                <ThemedText style={[styles.label, { fontSize: 14, color: '#4C8BF5', textAlign: 'center' }]}>
+                  ✓ Maximum images reached (5/5)
+                </ThemedText>
+              </View>
+            )}
           </View>
         )}
 
@@ -710,51 +801,10 @@ export default function EditEventForm({ event, onClose, onEventUpdated }: EditEv
         <View style={styles.inputContainer}>
           <ThemedText style={styles.label}>Precise Location *</ThemedText>
           <ThemedText style={styles.sublabel}>
-            Required: Choose the exact location for your event
+            Required: Use the map to select the exact location for your event
           </ThemedText>
           
           <View style={styles.locationOptionsContainer}>
-            {/* Find Address / Geocode Button */}
-            <TouchableOpacity
-              style={[
-                styles.locationButton,
-                isGeocodingLoading && styles.locationButtonDisabled,
-                {
-                  backgroundColor: showLocationInput 
-                    ? Colors[colorScheme ?? 'light'].tint 
-                    : Colors[colorScheme ?? 'light'].background,
-                  borderColor: Colors[colorScheme ?? 'light'].tint,
-                },
-              ]}
-              onPress={handleGeocode}
-              disabled={isGeocodingLoading}
-            >
-              {isGeocodingLoading ? (
-                <ActivityIndicator size="small" color="white" />
-              ) : (
-                <IconSymbol 
-                  name="location" 
-                  size={20} 
-                  color={showLocationInput ? "white" : Colors[colorScheme ?? 'light'].tint} 
-                />
-              )}
-              <ThemedText style={[
-                styles.locationButtonText, 
-                { 
-                  color: showLocationInput 
-                    ? "white" 
-                    : Colors[colorScheme ?? 'light'].tint 
-                }
-              ]}>
-                {isGeocodingLoading 
-                  ? 'Finding...' 
-                  : showLocationInput 
-                    ? 'Find Address' 
-                    : 'Enter Address'
-                }
-              </ThemedText>
-            </TouchableOpacity>
-
             {/* Map Picker Button */}
             <TouchableOpacity
               style={[
@@ -773,47 +823,33 @@ export default function EditEventForm({ event, onClose, onEventUpdated }: EditEv
             </TouchableOpacity>
           </View>
 
-          {/* Venue/Location Input - Shows when Find Address is clicked */}
-          {showLocationInput && (
-            <View style={styles.locationInputContainer}>
-              <ThemedText style={styles.locationInputLabel}>Venue/Location Address *</ThemedText>
-              <TextInput
-                style={[
-                  styles.input,
-                  {
-                    backgroundColor: Colors[colorScheme ?? 'light'].background,
-                    borderColor: Colors[colorScheme ?? 'light'].text + '30',
-                    color: Colors[colorScheme ?? 'light'].text,
-                  },
-                ]}
-                placeholder="Enter venue name and address"
-                placeholderTextColor={Colors[colorScheme ?? 'light'].text + '70'}
-                value={location}
-                onChangeText={setLocation}
-                maxLength={200}
-              />
-            </View>
-          )}
-
-          {/* Selected Location Display */}
-          {coordinates ? (
-            <View style={styles.selectedLocationContainer}>
-              <View style={styles.selectedLocationInfo}>
+          {/* Selected Location Display - Shows POI name or coordinates from map */}
+          {coordinates && (
+            <View style={styles.selectedSuggestionContainer}>
+              <View style={styles.selectedSuggestionContent}>
                 <IconSymbol name="checkmark.circle" size={16} color={Colors[colorScheme ?? 'light'].tint} />
-                <ThemedText style={styles.selectedLocationText}>
-                  📍 Location set: {coordinates.latitude.toFixed(4)}, {coordinates.longitude.toFixed(4)}
-                </ThemedText>
+                <View style={styles.selectedSuggestionTextContainer}>
+                  <ThemedText style={styles.selectedSuggestionDisplayName}>
+                    ✓ {selectedSuggestion ? selectedSuggestion.displayName : 'Location from Map'}
+                  </ThemedText>
+                  <ThemedText style={styles.selectedSuggestionFullAddress}>
+                    {selectedSuggestion 
+                      ? selectedSuggestion.fullAddress 
+                      : `📍 ${coordinates.latitude.toFixed(4)}, ${coordinates.longitude.toFixed(4)}`
+                    }
+                  </ThemedText>
+                </View>
+                <TouchableOpacity 
+                  onPress={() => {
+                    setSelectedSuggestion(null);
+                    setCoordinates(null);
+                    setIsMapLocation(false);
+                  }}
+                  style={styles.clearLocationButton}
+                >
+                  <IconSymbol name="xmark.circle.fill" size={20} color={Colors[colorScheme ?? 'light'].tabIconDefault} />
+                </TouchableOpacity>
               </View>
-              <TouchableOpacity onPress={clearLocation} style={styles.clearLocationButton}>
-                <IconSymbol name="xmark" size={14} color={Colors[colorScheme ?? 'light'].text + '70'} />
-              </TouchableOpacity>
-            </View>
-          ) : (
-            <View style={styles.warningLocationContainer}>
-              <IconSymbol name="exclamationmark.triangle" size={16} color="#ff9500" />
-              <ThemedText style={styles.warningLocationText}>
-                ⚠️ Please set a precise location using one of the options above
-              </ThemedText>
             </View>
           )}
         </View>
@@ -1502,53 +1538,97 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
   },
-  selectedLocationContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    backgroundColor: 'rgba(0, 200, 0, 0.1)',
-    borderRadius: 6,
-    marginTop: 8,
-  },
-  selectedLocationInfo: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    flex: 1,
-  },
-  selectedLocationText: {
-    fontSize: 12,
-    fontWeight: '500',
-  },
   clearLocationButton: {
     padding: 4,
   },
-  warningLocationContainer: {
+  autocompleteHelper: {
+    fontSize: 12,
+    color: '#888',
+    marginBottom: 8,
+    fontStyle: 'italic',
+  },
+  autocompleteContainer: {
+    position: 'relative',
+  },
+  suggestionLoadingContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingVertical: 8,
     paddingHorizontal: 12,
-    backgroundColor: 'rgba(255, 149, 0, 0.1)',
-    borderRadius: 6,
-    marginTop: 8,
     gap: 8,
   },
-  warningLocationText: {
+  suggestionLoadingText: {
     fontSize: 12,
-    fontWeight: '500',
-    color: '#ff9500',
+    color: '#666',
+  },
+  suggestionsContainer: {
+    position: 'absolute',
+    top: '100%',
+    left: 0,
+    right: 0,
+    borderWidth: 1,
+    borderColor: 'rgba(0, 0, 0, 0.1)',
+    borderRadius: 8,
+    maxHeight: 200,
+    zIndex: 1000,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 5,
+  },
+  suggestionItem: {
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderBottomWidth: 1,
+  },
+  suggestionContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  suggestionTextContainer: {
     flex: 1,
+    minWidth: 0, // Allow text to shrink
   },
-  locationInputContainer: {
-    marginTop: 12,
-    marginBottom: 8,
-  },
-  locationInputLabel: {
+  suggestionDisplayName: {
     fontSize: 14,
     fontWeight: '600',
-    marginBottom: 8,
+    marginBottom: 2,
+  },
+  suggestionFullAddress: {
+    fontSize: 12,
+    color: '#666',
+  },
+  selectedSuggestionContainer: {
+    marginTop: 8,
+    padding: 12,
+    backgroundColor: 'rgba(76, 139, 245, 0.1)',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(76, 139, 245, 0.3)',
+  },
+  selectedSuggestionContent: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    width: '100%',
+  },
+  selectedSuggestionTextContainer: {
+    flex: 1,
+    marginLeft: 8,
+    marginRight: 8,
+  },
+  selectedSuggestionDisplayName: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#4C8BF5',
+    marginBottom: 2,
+  },
+  selectedSuggestionFullAddress: {
+    fontSize: 12,
     color: '#666',
   },
   modalOverlay: {
@@ -1710,5 +1790,77 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '500',
     flex: 1,
+  },
+  // Multiple images styles
+  imagesContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+  },
+  imagePickerContainer: {
+    position: 'relative',
+    width: '48%',
+    aspectRatio: 1,
+  },
+  removeImageButton: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    backgroundColor: 'rgba(255, 255, 255, 0.9)',
+    borderRadius: 12,
+    zIndex: 1,
+  },
+  // Selected images preview styles
+  selectedImagesContainer: {
+    marginTop: 16,
+    padding: 12,
+    backgroundColor: '#F8F9FA',
+    borderRadius: 8,
+  },
+  selectedImageItem: {
+    position: 'relative',
+    marginRight: 12,
+  },
+  selectedImagePreview: {
+    width: 80,
+    height: 80,
+    borderRadius: 8,
+  },
+  addImageButton: {
+    backgroundColor: '#4C8BF5', // Will be overridden by inline style
+    padding: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginVertical: 8,
+    borderWidth: 1,
+    minHeight: 44,
+  },
+  addImageButtonText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  maxImagesContainer: {
+    padding: 16,
+    backgroundColor: '#E8F4FF',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#4C8BF5',
+  },
+  participantsIndicator: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 8,
+    paddingVertical: 6,
+    paddingHorizontal: 8,
+    backgroundColor: 'rgba(76, 139, 245, 0.1)',
+    borderRadius: 12,
+    alignSelf: 'flex-start',
+    gap: 6,
+  },
+  participantsCountText: {
+    fontSize: 12,
+    fontWeight: '500',
   },
 });

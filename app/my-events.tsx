@@ -157,8 +157,11 @@ export default function MyEventsScreen() {
     
     return (
       <View style={styles.eventItemWrapper}>
-        <TouchableOpacity onPress={() => navigateToEvent(item)}>
-          <EventCard event={item} />
+        <TouchableOpacity 
+          onPress={() => navigateToEvent(item)}
+          style={styles.eventCardContainer}
+        >
+          <EventCard event={item} showShadow={false} />
         </TouchableOpacity>
         <View style={styles.eventStatus}>
           <View style={styles.statusRow}>
@@ -289,7 +292,21 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
   },
   eventItemWrapper: {
-    marginBottom: 16,
+    marginBottom: 24, // Increase space between event groups
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 1,
+    },
+    shadowOpacity: 0.08,
+    shadowRadius: 2,
+    elevation: 2,
+    borderRadius: 12,
+  },
+  eventCardContainer: {
+    borderTopLeftRadius: 12,
+    borderTopRightRadius: 12,
+    overflow: 'hidden',
   },
   eventStatus: {
     flexDirection: 'row',
@@ -297,10 +314,15 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 12,
     paddingVertical: 8,
-    backgroundColor: 'rgba(0, 0, 0, 0.02)',
+    backgroundColor: 'rgba(0, 0, 0, 0.05)',
     borderBottomLeftRadius: 12,
     borderBottomRightRadius: 12,
-    marginTop: -8,
+    marginTop: 0, // Seamless connection with event card
+    marginBottom: 8, // Add space from next event
+    borderLeftWidth: 1,
+    borderRightWidth: 1,
+    borderBottomWidth: 1,
+    borderColor: 'rgba(0, 0, 0, 0.1)',
   },
   statusRow: {
     flexDirection: 'row',

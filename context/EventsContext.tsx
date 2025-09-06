@@ -1500,12 +1500,38 @@ export const EventProvider: React.FC<{children: React.ReactNode}> = ({ children 
       // Insert updated participants
       if (eventData.participants && eventData.participants.length > 0) {
         const participantPromises = eventData.participants.map(async (participant) => {
+          console.log('Processing participant for update:', participant);
+          
+          const insertData: any = {
+            event_id: eventId,
+            is_external: participant.isExternal || false,
+          };
+          
+          if (participant.isExternal) {
+            // External participant - use external fields
+            insertData.user_id = null; // NULL for external participants
+            insertData.external_name = participant.name;
+            insertData.external_email = participant.email || null;
+            console.log('External participant insert data:', insertData);
+          } else {
+            // App user - use existing user_id, but validate it exists
+            if (!participant.id || participant.id.startsWith('external_participant_')) {
+              console.warn('Invalid app user ID for participant:', participant);
+              // Skip invalid app users or treat as external
+              insertData.user_id = null;
+              insertData.external_name = participant.name;
+              insertData.external_email = participant.email || null;
+              insertData.is_external = true;
+            } else {
+              insertData.user_id = participant.id;
+              insertData.external_name = null;
+              insertData.external_email = null;
+            }
+          }
+          
           const { error } = await supabase
             .from('event_participants')
-            .insert({
-              event_id: eventId,
-              user_id: participant.id,
-            });
+            .insert(insertData);
           if (error) {
             console.error('Participant update error:', error);
           }

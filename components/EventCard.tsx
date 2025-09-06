@@ -11,9 +11,10 @@ import { useColorScheme } from '@/hooks/useColorScheme';
 
 type EventCardProps = {
   event: Event;
+  showShadow?: boolean;
 };
 
-export default function EventCard({ event }: EventCardProps) {
+export default function EventCard({ event, showShadow = true }: EventCardProps) {
   const router = useRouter();
   const colorScheme = useColorScheme();
   
@@ -74,7 +75,7 @@ export default function EventCard({ event }: EventCardProps) {
   return (
     <TouchableOpacity 
       style={[
-        styles.card, 
+        showShadow ? styles.card : styles.cardNoShadow, 
         { backgroundColor: Colors[colorScheme ?? 'light'].background }
       ]}
       onPress={navigateToEventDetails}
@@ -121,6 +122,15 @@ const styles = StyleSheet.create({
     elevation: 3,
     borderWidth: 1,
     borderColor: 'rgba(0, 0, 0, 0.2)',
+  },
+  cardNoShadow: {
+    borderTopLeftRadius: 12,
+    borderTopRightRadius: 12,
+    overflow: 'hidden',
+    marginBottom: 0,
+    borderWidth: 1,
+    borderBottomWidth: 0, // No bottom border since status section will connect
+    borderColor: 'rgba(0, 0, 0, 0.1)',
   },
   image: {
     width: '100%',
