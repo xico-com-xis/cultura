@@ -1,0 +1,3 @@
+[submodule ".\\cultura-backend\\"]
+	path = .\\cultura-backend\\
+	url = https://github.com/ReasonZx/cultura-backend.git
