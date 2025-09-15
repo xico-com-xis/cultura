@@ -501,9 +501,9 @@ export default function ProfileScreen() {
             <ThemedText style={styles.userEmail}>{user?.email}</ThemedText>
           </ThemedView>
 
-          {/* My Created Events Section - Move to top for visibility */}
+          {/* Events Section */}
           <ThemedView style={styles.section}>
-            <ThemedText type="defaultSemiBold" style={styles.sectionTitle}>My Events</ThemedText>
+            <ThemedText type="defaultSemiBold" style={styles.sectionTitle}>Events</ThemedText>
             
             <TouchableOpacity 
               style={styles.menuItem}
@@ -517,7 +517,7 @@ export default function ProfileScreen() {
                     color={Colors[colorScheme ?? 'light'].tint} 
                   />
                   <View style={styles.menuItemText}>
-                    <ThemedText style={styles.menuItemTitle}>My Created Events</ThemedText>
+                    <ThemedText style={styles.menuItemTitle}>Organized</ThemedText>
                     <ThemedText style={styles.menuItemSubtitle}>
                       {userEventsCount === 0 
                         ? 'Create your first event'
@@ -533,15 +533,36 @@ export default function ProfileScreen() {
                 />
               </View>
             </TouchableOpacity>
-          </ThemedView>
 
-          {/* Notifications & Favorites Section */}
-          <ThemedView style={styles.section}>
-            <ThemedText type="defaultSemiBold" style={styles.sectionTitle}>Preferences</ThemedText>
-            
             <TouchableOpacity 
               style={styles.menuItem}
-              onPress={() => router.push('/notifications-favorites')}
+              onPress={() => router.push('/participating-events')}
+            >
+              <View style={styles.menuItemContent}>
+                <View style={styles.menuItemLeft}>
+                  <IconSymbol 
+                    name="person.2.fill" 
+                    size={24} 
+                    color={Colors[colorScheme ?? 'light'].tint} 
+                  />
+                  <View style={styles.menuItemText}>
+                    <ThemedText style={styles.menuItemTitle}>Participating</ThemedText>
+                    <ThemedText style={styles.menuItemSubtitle}>
+                      Events where you're tagged as participant
+                    </ThemedText>
+                  </View>
+                </View>
+                <IconSymbol 
+                  name="chevron.right" 
+                  size={20} 
+                  color={Colors[colorScheme ?? 'light'].text} 
+                />
+              </View>
+            </TouchableOpacity>
+
+            <TouchableOpacity 
+              style={styles.menuItem}
+              onPress={() => router.push('/following-events')}
             >
               <View style={styles.menuItemContent}>
                 <View style={styles.menuItemLeft}>
@@ -551,9 +572,9 @@ export default function ProfileScreen() {
                     color={Colors[colorScheme ?? 'light'].tint} 
                   />
                   <View style={styles.menuItemText}>
-                    <ThemedText style={styles.menuItemTitle}>Notifications & Favorites</ThemedText>
+                    <ThemedText style={styles.menuItemTitle}>Following</ThemedText>
                     <ThemedText style={styles.menuItemSubtitle}>
-                      Manage followed organizers
+                      Events you're following for updates
                     </ThemedText>
                   </View>
                 </View>
@@ -566,9 +587,92 @@ export default function ProfileScreen() {
             </TouchableOpacity>
           </ThemedView>
 
-          {/* Country Selection Section - Moved to last */}
+          {/* People and Tags Section */}
           <ThemedView style={styles.section}>
-            <ThemedText type="defaultSemiBold" style={styles.sectionTitle}>Location</ThemedText>
+            <ThemedText type="defaultSemiBold" style={styles.sectionTitle}>People</ThemedText>
+            
+            <TouchableOpacity 
+              style={styles.menuItem}
+              onPress={() => router.push('/people-following')}
+            >
+              <View style={styles.menuItemContent}>
+                <View style={styles.menuItemLeft}>
+                  <IconSymbol 
+                    name="person.2.circle.fill" 
+                    size={24} 
+                    color={Colors[colorScheme ?? 'light'].tint} 
+                  />
+                  <View style={styles.menuItemText}>
+                    <ThemedText style={styles.menuItemTitle}>Following</ThemedText>
+                    <ThemedText style={styles.menuItemSubtitle}>
+                      People and organizers you follow
+                    </ThemedText>
+                  </View>
+                </View>
+                <IconSymbol 
+                  name="chevron.right" 
+                  size={20} 
+                  color={Colors[colorScheme ?? 'light'].text} 
+                />
+              </View>
+            </TouchableOpacity>
+
+            <TouchableOpacity 
+              style={styles.menuItem}
+              onPress={() => router.push('/people-followers')}
+            >
+              <View style={styles.menuItemContent}>
+                <View style={styles.menuItemLeft}>
+                  <IconSymbol 
+                    name="person.3.fill" 
+                    size={24} 
+                    color={Colors[colorScheme ?? 'light'].tint} 
+                  />
+                  <View style={styles.menuItemText}>
+                    <ThemedText style={styles.menuItemTitle}>Followers</ThemedText>
+                    <ThemedText style={styles.menuItemSubtitle}>
+                      People following you
+                    </ThemedText>
+                  </View>
+                </View>
+                <IconSymbol 
+                  name="chevron.right" 
+                  size={20} 
+                  color={Colors[colorScheme ?? 'light'].text} 
+                />
+              </View>
+            </TouchableOpacity>
+
+            <TouchableOpacity 
+              style={styles.menuItem}
+              onPress={() => router.push('/tag-requests')}
+            >
+              <View style={styles.menuItemContent}>
+                <View style={styles.menuItemLeft}>
+                  <IconSymbol 
+                    name="person.badge.plus" 
+                    size={24} 
+                    color={Colors[colorScheme ?? 'light'].tint} 
+                  />
+                  <View style={styles.menuItemText}>
+                    <ThemedText style={styles.menuItemTitle}>Tag Requests</ThemedText>
+                    <ThemedText style={styles.menuItemSubtitle}>
+                      Requests to be tagged in events
+                    </ThemedText>
+                  </View>
+                </View>
+                <IconSymbol 
+                  name="chevron.right" 
+                  size={20} 
+                  color={Colors[colorScheme ?? 'light'].text} 
+                />
+              </View>
+            </TouchableOpacity>
+          </ThemedView>
+
+          {/* Settings Section */}
+          <ThemedView style={styles.section}>
+            <ThemedText type="defaultSemiBold" style={styles.sectionTitle}>Settings</ThemedText>
             
             <TouchableOpacity 
               style={styles.menuItem}
@@ -582,9 +686,35 @@ export default function ProfileScreen() {
                     color={Colors[colorScheme ?? 'light'].tint} 
                   />
                   <View style={styles.menuItemText}>
-                    <ThemedText style={styles.menuItemTitle}>Country Settings</ThemedText>
+                    <ThemedText style={styles.menuItemTitle}>Country Selection</ThemedText>
                     <ThemedText style={styles.menuItemSubtitle}>
                       {countryFlags[filters.selectedCountry] || '🌍'} {filters.selectedCountry}
+                    </ThemedText>
+                  </View>
+                </View>
+                <IconSymbol 
+                  name="chevron.right" 
+                  size={20} 
+                  color={Colors[colorScheme ?? 'light'].text} 
+                />
+              </View>
+            </TouchableOpacity>
+
+            <TouchableOpacity 
+              style={styles.menuItem}
+              onPress={() => router.push('/notification-settings')}
+            >
+              <View style={styles.menuItemContent}>
+                <View style={styles.menuItemLeft}>
+                  <IconSymbol 
+                    name="bell.fill" 
+                    size={24} 
+                    color={Colors[colorScheme ?? 'light'].tint} 
+                  />
+                  <View style={styles.menuItemText}>
+                    <ThemedText style={styles.menuItemTitle}>Notification Settings</ThemedText>
+                    <ThemedText style={styles.menuItemSubtitle}>
+                      Manage push notifications and alerts
                     </ThemedText>
                   </View>
                 </View>

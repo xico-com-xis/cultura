@@ -18,19 +18,12 @@ export default function MyEventsScreen() {
   const [futureEvents, setFutureEvents] = useState<Event[]>([]);
   const [pastEvents, setPastEvents] = useState<Event[]>([]);
 
-  // Filter and separate events where user is organizer or participant
+  // Filter and separate events where user is the organizer
   useEffect(() => {
     if (user && events.length > 0) {
-      // Include events where user is organizer OR participant
+      // Include only events where user is the organizer
       const userEvents = events.filter(event => {
-        // Check if user is the organizer
-        const isOrganizer = event.organizer.id === user.id;
-        
-        // Check if user is tagged as a participant
-        const isParticipant = event.participants && 
-                             event.participants.some(participant => participant.id === user.id);
-        
-        return isOrganizer || isParticipant;
+        return event.organizer.id === user.id;
       });
       const now = new Date();
       
@@ -202,9 +195,9 @@ export default function MyEventsScreen() {
   const renderEmptyState = () => (
     <ThemedView style={styles.emptyContainer}>
       <IconSymbol name="calendar.badge.plus" size={80} color="#ccc" />
-      <ThemedText style={styles.emptyTitle}>No Events Created</ThemedText>
+      <ThemedText style={styles.emptyTitle}>No Events Organized</ThemedText>
       <ThemedText style={styles.emptyText}>
-        You haven't created any events yet. Start by creating your first event to share with the community!
+        You haven't organized any events yet. Start by creating your first event to share with the community!
       </ThemedText>
       <TouchableOpacity 
         style={[styles.createButton, { backgroundColor: Colors[colorScheme ?? 'light'].tint }]}
@@ -223,7 +216,7 @@ export default function MyEventsScreen() {
           <IconSymbol name="person.circle" size={80} color="#ccc" />
           <ThemedText style={styles.emptyTitle}>Sign In Required</ThemedText>
           <ThemedText style={styles.emptyText}>
-            Sign in to view and manage the events you've created
+            Sign in to view and manage the events you've organized
           </ThemedText>
         </ThemedView>
       </ThemedView>
@@ -236,7 +229,7 @@ export default function MyEventsScreen() {
     <>
       <Stack.Screen 
         options={{
-          title: 'My Events',
+          title: 'Organized Events',
           headerBackTitle: 'Profile'
         }} 
       />

@@ -1,6 +1,7 @@
 import { supabase } from '@/lib/supabase';
 import { Session, User } from '@supabase/supabase-js';
 import React, { createContext, useContext, useEffect, useState } from 'react';
+import { registerForPushNotifications, setupNotificationListeners } from '@/services/notificationService';
 
 interface AuthContextType {
   user: User | null;
@@ -29,13 +30,29 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // Listen for auth changes
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
+    } = supabase.auth.onAuthStateChange(async (_event, session) => {
       setSession(session);
       setUser(session?.user ?? null);
       setLoading(false);
+
+      // Register for push notifications when user signs in (non-blocking)
+      if (session?.user) {
+        try {
+          await registerForPushNotifications(session.user.id);
+        } catch (error) {
+          // Don't block login if push notification registration fails
+          console.log('Push notification registration failed during login:', error);
+        }
+      }
     });
 
-    return () => subscription.unsubscribe();
+    // Setup notification listeners
+    const removeNotificationListeners = setupNotificationListeners();
+
+    return () => {
+      subscription.unsubscribe();
+      removeNotificationListeners();
+    };
   }, []);
 
   const signUp = async (email: string, password: string, userData?: { displayName?: string }) => {

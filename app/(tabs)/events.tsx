@@ -349,10 +349,10 @@ export default function EventsScreen() {
             <View style={styles.modalHeader}>
               <ThemedText type="title" style={styles.modalTitle}>Filter Events</ThemedText>
               <TouchableOpacity 
-                style={styles.typeButton}
+                style={styles.closeButton}
                 onPress={() => setFilterModalVisible(false)}
               >
-                <IconSymbol name="xmark" size={24} color={Colors[colorScheme ?? 'light'].text} />
+                <ThemedText style={styles.closeButtonText}>×</ThemedText>
               </TouchableOpacity>
             </View>
             

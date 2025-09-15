@@ -12,6 +12,7 @@ import { useAuth } from '@/context/AuthContext';
 import { Event, useEvents } from '@/context/EventsContext';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { supabase } from '@/lib/supabase';
+import { registerForPushNotifications } from '@/services/notificationService';
 
 type EventPeriod = 'future' | 'past';
 
@@ -158,7 +159,7 @@ export default function ProfileDetailScreen() {
         await unfavoritePerson(profileId);
       } else {
         // When favoriting a person, check if user has notification settings enabled
-        // and request permissions if needed
+        // and register for push notifications if needed
         const hasNotificationsEnabled = isGlobalNotificationEnabled('reminders') || 
                                        isGlobalNotificationEnabled('updates') || 
                                        isGlobalNotificationEnabled('changes');
@@ -176,57 +177,43 @@ export default function ProfileDetailScreen() {
   };
 
   const checkAndRequestNotificationPermissions = async (): Promise<boolean> => {
+    if (!user) return false;
+    
     try {
-      // First check current permissions
-      const { status: existingStatus } = await Notifications.getPermissionsAsync();
+      // Use the centralized notification service to register for push notifications
+      const token = await registerForPushNotifications(user.id);
       
-      if (existingStatus === 'granted') {
+      if (token) {
         return true;
       }
       
-      // If not granted, request permissions
-      const { status } = await Notifications.requestPermissionsAsync({
-        ios: {
-          allowAlert: true,
-          allowBadge: true,
-          allowSound: true,
-        },
-      });
-      
-      if (status === 'granted') {
-        return true;
-      }
-      
-      // Handle different denial scenarios
-      if (status === 'denied') {
-        Alert.alert(
-          'Notifications Disabled',
-          'You have notification settings enabled but notifications are disabled. To receive event notifications, please enable notifications in your device settings.',
-          [
-            { text: 'Cancel', style: 'cancel' },
-            { 
-              text: 'Open Settings', 
-              onPress: () => {
-                Alert.alert(
-                  'Enable Notifications',
-                  'Go to Settings > Notifications > Cultura and enable notifications.',
-                  [{ text: 'OK' }]
-                );
-              }
+      // If registration failed, show appropriate message
+      Alert.alert(
+        'Notifications Disabled',
+        'You have notification settings enabled but notifications are disabled. To receive event notifications, please enable notifications in your device settings.',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { 
+            text: 'Open Settings', 
+            onPress: () => {
+              Alert.alert(
+                'Enable Notifications',
+                'Go to Settings > Notifications > Cultura and enable notifications.',
+                [{ text: 'OK' }]
+              );
             }
-          ]
-        );
-      } else {
-        Alert.alert(
-          'Notification Permission Required',
-          'You have notification settings enabled but we need permission to send notifications.',
-          [{ text: 'OK' }]
-        );
-      }
+          }
+        ]
+      );
       
       return false;
     } catch (error) {
       console.error('Error requesting notification permissions:', error);
+      Alert.alert(
+        'Notification Error',
+        'Failed to set up notifications. Please try again later.',
+        [{ text: 'OK' }]
+      );
       return false;
     }
   };

@@ -3,6 +3,7 @@ import { preloadImages } from '@/utils/imageCache';
 import * as Notifications from 'expo-notifications';
 import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
 import { useAuth } from './AuthContext';
+import { notifyBackendOfUserAction, updateNotificationPreferences, notifyBackendOfEventCreation, notifyBackendOfEventUpdate, registerForPushNotifications } from '@/services/notificationService';
 
 // Point-in-polygon algorithm (ray casting)
 const isPointInPolygon = (point: { latitude: number; longitude: number }, polygon: Array<{ latitude: number; longitude: number }>): boolean => {
@@ -968,6 +969,13 @@ export const EventProvider: React.FC<{children: React.ReactNode}> = ({ children 
         favoriteEvents: new Set([...prev.favoriteEvents, eventId]),
       }));
 
+      // Notify backend for auto-scheduling reminders
+      await notifyBackendOfUserAction({
+        type: 'favorite_event',
+        userId: user.id,
+        eventId,
+      });
+
       // Schedule notifications for this event if user has notification settings enabled
       await scheduleEventNotifications(eventId);
     } catch (error) {
@@ -999,6 +1007,13 @@ export const EventProvider: React.FC<{children: React.ReactNode}> = ({ children 
         ...prev,
         favoriteEvents: newFavorites,
       }));
+
+      // Notify backend to remove scheduled reminders
+      await notifyBackendOfUserAction({
+        type: 'unfavorite_event',
+        userId: user.id,
+        eventId,
+      });
 
       // Cancel notifications for this event
       await cancelEventNotifications(eventId);
@@ -1032,6 +1047,13 @@ export const EventProvider: React.FC<{children: React.ReactNode}> = ({ children 
         ...prev,
         favoritePeople: new Set([...prev.favoritePeople, personId]),
       }));
+
+      // Notify backend for new event notifications from this person
+      await notifyBackendOfUserAction({
+        type: 'favorite_person',
+        userId: user.id,
+        personId,
+      });
     } catch (error) {
       console.error('Error favoriting person:', error);
       throw error;
@@ -1061,6 +1083,13 @@ export const EventProvider: React.FC<{children: React.ReactNode}> = ({ children 
         ...prev,
         favoritePeople: newFavorites,
       }));
+
+      // Notify backend to stop new event notifications from this person
+      await notifyBackendOfUserAction({
+        type: 'unfavorite_person',
+        userId: user.id,
+        personId,
+      });
     } catch (error) {
       console.error('Error unfavoriting person:', error);
       throw error;
@@ -1099,6 +1128,22 @@ export const EventProvider: React.FC<{children: React.ReactNode}> = ({ children 
           globalNotificationSettings: new Set([...prev.globalNotificationSettings, notificationType]),
         }));
 
+        // Sync with notification backend
+        await updateNotificationPreferences(user.id, {
+          [notificationType]: true,
+        });
+
+        // Register for push notifications if this is the user's first notification setting
+        const hasAnyNotifications = favoriteState.globalNotificationSettings.size === 0;
+        if (hasAnyNotifications) {
+          try {
+            await registerForPushNotifications(user.id);
+          } catch (error) {
+            console.error('Failed to register for push notifications:', error);
+            // Don't fail the whole operation if push registration fails
+          }
+        }
+
         // Reschedule notifications for all favorited events
         if (notificationType === 'reminders') {
           await rescheduleAllEventNotifications();
@@ -1122,6 +1167,11 @@ export const EventProvider: React.FC<{children: React.ReactNode}> = ({ children 
           ...prev,
           globalNotificationSettings: newSettings,
         }));
+
+        // Sync with notification backend
+        await updateNotificationPreferences(user.id, {
+          [notificationType]: false,
+        });
 
         // Cancel reminder notifications if reminders are disabled
         if (notificationType === 'reminders') {
@@ -1361,6 +1411,14 @@ export const EventProvider: React.FC<{children: React.ReactNode}> = ({ children 
         }
       }, 2000);
 
+      // Notify backend about the new event (for follower notifications)
+      try {
+        await notifyBackendOfEventCreation(localEvent);
+      } catch (error) {
+        console.error('Failed to notify backend of event creation:', error);
+        // Don't throw - the event was created successfully, notification is optional
+      }
+
       // Return the created event so the form can use it for navigation
       return localEvent;
 
@@ -1579,6 +1637,14 @@ export const EventProvider: React.FC<{children: React.ReactNode}> = ({ children 
           console.error('Background refresh failed:', error);
         }
       }, 2000);
+
+      // Notify backend about the event update
+      try {
+        await notifyBackendOfEventUpdate(eventData);
+      } catch (error) {
+        console.error('Failed to notify backend of event update:', error);
+        // Don't throw - the event was updated successfully, notification is optional
+      }
 
     } catch (error) {
       console.error('Error updating event:', error);

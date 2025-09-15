@@ -1,4 +1,4 @@
-import * as FileSystem from 'expo-file-system';
+import * as FileSystem from 'expo-file-system/legacy';
 
 const IMAGE_CACHE_DIR = `${FileSystem.cacheDirectory}images/`;
 const MAX_CACHE_SIZE = 100 * 1024 * 1024; // 100MB max cache size
