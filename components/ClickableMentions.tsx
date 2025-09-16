@@ -8,6 +8,12 @@ import { useColorScheme } from '../hooks/useColorScheme';
 interface ClickableMentionsProps {
   text: string;
   style?: any;
+  participants?: Array<{
+    id: string;
+    name: string;
+    status?: 'pending' | 'accepted' | 'declined';
+    isExternal?: boolean;
+  }>;
 }
 
 interface MentionMatch {
@@ -18,8 +24,19 @@ interface MentionMatch {
   endIndex: number;
 }
 
-export default function ClickableMentions({ text, style }: ClickableMentionsProps) {
+export default function ClickableMentions({ text, style, participants = [] }: ClickableMentionsProps) {
   const colorScheme = useColorScheme();
+
+  // Get participant status by ID
+  const getParticipantStatus = (userId: string) => {
+    const participant = participants.find(p => p.id === userId);
+    return participant?.status || 'accepted'; // Default to accepted for backwards compatibility
+  };
+
+  const isExternalParticipant = (userId: string) => {
+    const participant = participants.find(p => p.id === userId);
+    return participant?.isExternal || userId.startsWith('external_');
+  };
 
   // Parse mentions from text - looking for @[Name](id) pattern
   const parseMentionsFromText = (inputText: string): MentionMatch[] => {
@@ -71,8 +88,9 @@ export default function ClickableMentions({ text, style }: ClickableMentionsProp
         );
       }
 
-      // Add mention as clickable text or plain text for external users
-      const isExternal = mention.userId.startsWith('external_');
+      // Add mention as clickable text or plain text based on status and type
+      const isExternal = isExternalParticipant(mention.userId);
+      const status = getParticipantStatus(mention.userId);
       
       if (isExternal) {
         // External participants - non-clickable but styled
@@ -91,8 +109,8 @@ export default function ClickableMentions({ text, style }: ClickableMentionsProp
             @{mention.displayName}
           </ThemedText>
         );
-      } else {
-        // App users - clickable
+      } else if (status === 'accepted') {
+        // Accepted app users - clickable and blue
         elements.push(
           <Text
             key={`mention-${index}`}
@@ -108,6 +126,40 @@ export default function ClickableMentions({ text, style }: ClickableMentionsProp
           >
             @{mention.displayName}
           </Text>
+        );
+      } else if (status === 'pending') {
+        // Pending requests - gray and non-clickable
+        elements.push(
+          <ThemedText 
+            key={`mention-${index}`} 
+            style={[
+              style,
+              {
+                color: '#999999',
+                fontWeight: '600',
+                fontStyle: 'italic'
+              }
+            ]}
+          >
+            @{mention.displayName}
+          </ThemedText>
+        );
+      } else if (status === 'declined') {
+        // Declined requests - strikethrough and gray
+        elements.push(
+          <ThemedText 
+            key={`mention-${index}`} 
+            style={[
+              style,
+              {
+                color: '#999999',
+                fontWeight: '400',
+                textDecorationLine: 'line-through'
+              }
+            ]}
+          >
+            @{mention.displayName}
+          </ThemedText>
         );
       }
 

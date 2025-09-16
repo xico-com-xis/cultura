@@ -700,6 +700,7 @@ Find more events on the Cultura app!`;
             <ClickableMentions 
               text={event.description} 
               style={styles.sectionContent}
+              participants={event.participants}
             />
           </ThemedView>
           

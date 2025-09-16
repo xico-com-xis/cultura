@@ -229,11 +229,21 @@ export default function MyEventsScreen() {
     <>
       <Stack.Screen 
         options={{
-          title: 'Organized Events',
-          headerBackTitle: 'Profile'
+          headerShown: false,
         }} 
       />
       <ThemedView style={styles.container}>
+        <ThemedView style={styles.header}>
+          <TouchableOpacity 
+            style={styles.headerBackButton}
+            onPress={() => router.back()}
+          >
+            <IconSymbol name="chevron.left" size={24} color={Colors[colorScheme ?? 'light'].tint} />
+          </TouchableOpacity>
+          <ThemedText style={styles.headerTitle}>Organized Events</ThemedText>
+          <View style={{ width: 40 }} />
+        </ThemedView>
+
         <ThemedView style={styles.content}>
           {loading ? (
             <ThemedView style={styles.emptyContainer}>
@@ -276,6 +286,28 @@ export default function MyEventsScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    paddingTop: 50,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e0e0e0',
+  },
+  headerBackButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  headerTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    flex: 1,
+    textAlign: 'center',
   },
   content: {
     flex: 1,

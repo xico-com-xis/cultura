@@ -4,6 +4,7 @@ import * as Notifications from 'expo-notifications';
 import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
 import { useAuth } from './AuthContext';
 import { notifyBackendOfUserAction, updateNotificationPreferences, notifyBackendOfEventCreation, notifyBackendOfEventUpdate, registerForPushNotifications } from '@/services/notificationService';
+import { ParticipantService } from '@/services/participantService';
 
 // Point-in-polygon algorithm (ray casting)
 const isPointInPolygon = (point: { latitude: number; longitude: number }, polygon: Array<{ latitude: number; longitude: number }>): boolean => {
@@ -63,6 +64,8 @@ export type Organizer = {
   // External participant fields
   isExternal?: boolean;
   email?: string; // For external participants
+  // Participant status field
+  status?: 'pending' | 'accepted' | 'declined';
 };
 
 // Define accessibility options
@@ -459,6 +462,7 @@ export const EventProvider: React.FC<{children: React.ReactNode}> = ({ children 
           id,
           event_id,
           user_id,
+          status,
           is_external,
           external_name,
           external_email,
@@ -492,6 +496,7 @@ export const EventProvider: React.FC<{children: React.ReactNode}> = ({ children 
             email: participant.external_email,
             isExternal: true,
             profileImage: undefined,
+            status: participant.status || 'pending', // Include status
           });
         } else if (participant.profiles) {
           // App user participant
@@ -501,6 +506,7 @@ export const EventProvider: React.FC<{children: React.ReactNode}> = ({ children 
             email: undefined,
             isExternal: false,
             profileImage: participant.profiles.avatar_url,
+            status: participant.status || 'pending', // Include status
           });
         }
       });
@@ -1301,54 +1307,17 @@ export const EventProvider: React.FC<{children: React.ReactNode}> = ({ children 
         }
       }
 
-      // Insert participants (both app users and external participants)
+      // Insert participants using the new ParticipantService
       if (eventData.participants && eventData.participants.length > 0) {
-        console.log('Inserting participants:', eventData.participants);
+        console.log('Creating participant requests:', eventData.participants);
         
-        const participantPromises = eventData.participants.map(async (participant: any) => {
-          console.log('Processing participant:', participant);
-          
-          const insertData: any = {
-            event_id: eventRecord.id,
-            is_external: participant.isExternal || false,
-          };
-          
-          if (participant.isExternal) {
-            // External participant - use new columns
-            insertData.user_id = null; // NULL for external participants
-            insertData.external_name = participant.name;
-            insertData.external_email = participant.email || null;
-            console.log('External participant insert data:', insertData);
-          } else {
-            // App user - use existing user_id, but validate it exists
-            if (!participant.id || participant.id.startsWith('external_participant_')) {
-              console.warn('Invalid app user ID for participant:', participant);
-              // Skip invalid app users or treat as external
-              insertData.user_id = null;
-              insertData.external_name = participant.name;
-              insertData.external_email = participant.email || null;
-              insertData.is_external = true;
-            } else {
-              insertData.user_id = participant.id;
-              insertData.external_name = null;
-              insertData.external_email = null;
-            }
-            console.log('App user participant insert data:', insertData);
-          }
-          
-          const { error } = await supabase
-            .from('event_participants')
-            .insert(insertData);
-          if (error) {
-            console.error('Participant insertion error:', error);
-          }
-          return error;
-        });
+        const success = await ParticipantService.createParticipantRequests(
+          eventRecord.id,
+          eventData.participants
+        );
         
-        const participantResults = await Promise.all(participantPromises);
-        const participantErrors = participantResults.filter(Boolean);
-        if (participantErrors.length > 0) {
-          console.warn('Some participant insertions failed:', participantErrors);
+        if (!success) {
+          console.warn('Some participant requests failed to create');
         }
       }
 

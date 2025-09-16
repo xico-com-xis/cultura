@@ -1,6 +1,6 @@
 import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { ActionSheetIOS, ActivityIndicator, Alert, Image, KeyboardAvoidingView, Modal, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActionSheetIOS, ActivityIndicator, Alert, Image, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
@@ -11,6 +11,9 @@ import { useEvents } from '@/context/EventsContext';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { supabase } from '@/lib/supabase';
 import { pickImage, takePhoto } from '@/utils/imageUpload';
+import { ParticipantService } from '@/services/participantService';
+import { useFocusEffect } from '@react-navigation/native';
+import { useCallback } from 'react';
 
 // Login Form Component
 function LoginForm() {
@@ -193,9 +196,9 @@ export default function ProfileScreen() {
   const { filters, availableCountries, setSelectedCountry, events } = useEvents();
   const { user, signOut } = useAuth();
   const colorScheme = useColorScheme();
-  const [countryModalVisible, setCountryModalVisible] = useState(false);
   const [avatarUri, setAvatarUri] = useState<string | null>(null);
   const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
+  const [pendingRequestsCount, setPendingRequestsCount] = useState(0);
 
   // Load user's avatar from profiles table
   useEffect(() => {
@@ -203,6 +206,26 @@ export default function ProfileScreen() {
       loadUserAvatar();
     }
   }, [user?.id]);
+
+  // Load pending participant requests count
+  useFocusEffect(
+    useCallback(() => {
+      if (user?.id) {
+        loadPendingRequestsCount();
+      }
+    }, [user?.id])
+  );
+
+  const loadPendingRequestsCount = async () => {
+    try {
+      if (!user?.id) return;
+      
+      const count = await ParticipantService.getPendingRequestsCount(user.id);
+      setPendingRequestsCount(count);
+    } catch (error) {
+      console.error('Error loading pending requests count:', error);
+    }
+  };
 
   const loadUserAvatar = async () => {
     try {
@@ -243,11 +266,6 @@ export default function ProfileScreen() {
     'United Kingdom': '🇬🇧',
     'Netherlands': '🇳🇱',
     'Belgium': '🇧🇪',
-  };
-
-  const handleCountrySelect = (country: string) => {
-    setSelectedCountry(country);
-    setCountryModalVisible(false);
   };
 
   const uploadAvatarToSupabase = async (imageUri: string): Promise<{ success: boolean; url?: string; error?: string }> => {
@@ -507,7 +525,7 @@ export default function ProfileScreen() {
             
             <TouchableOpacity 
               style={styles.menuItem}
-              onPress={() => router.push('/my-events' as any)}
+              onPress={() => router.push('/events-organized' as any)}
             >
               <View style={styles.menuItemContent}>
                 <View style={styles.menuItemLeft}>
@@ -536,7 +554,7 @@ export default function ProfileScreen() {
 
             <TouchableOpacity 
               style={styles.menuItem}
-              onPress={() => router.push('/participating-events')}
+              onPress={() => router.push('/events-participating')}
             >
               <View style={styles.menuItemContent}>
                 <View style={styles.menuItemLeft}>
@@ -562,7 +580,7 @@ export default function ProfileScreen() {
 
             <TouchableOpacity 
               style={styles.menuItem}
-              onPress={() => router.push('/following-events')}
+              onPress={() => router.push('/events-following')}
             >
               <View style={styles.menuItemContent}>
                 <View style={styles.menuItemLeft}>
@@ -645,7 +663,7 @@ export default function ProfileScreen() {
 
             <TouchableOpacity 
               style={styles.menuItem}
-              onPress={() => router.push('/tag-requests')}
+              onPress={() => router.push('/people-tag-requests')}
             >
               <View style={styles.menuItemContent}>
                 <View style={styles.menuItemLeft}>
@@ -657,15 +675,27 @@ export default function ProfileScreen() {
                   <View style={styles.menuItemText}>
                     <ThemedText style={styles.menuItemTitle}>Tag Requests</ThemedText>
                     <ThemedText style={styles.menuItemSubtitle}>
-                      Requests to be tagged in events
+                      Event organizers who tagged you
                     </ThemedText>
                   </View>
                 </View>
-                <IconSymbol 
-                  name="chevron.right" 
-                  size={20} 
-                  color={Colors[colorScheme ?? 'light'].text} 
-                />
+                <View style={styles.menuItemRight}>
+                  {pendingRequestsCount > 0 && (
+                    <View style={[
+                      styles.badge,
+                      { backgroundColor: Colors[colorScheme ?? 'light'].tint }
+                    ]}>
+                      <ThemedText style={styles.badgeText}>
+                        {pendingRequestsCount}
+                      </ThemedText>
+                    </View>
+                  )}
+                  <IconSymbol 
+                    name="chevron.right" 
+                    size={20} 
+                    color={Colors[colorScheme ?? 'light'].text} 
+                  />
+                </View>
               </View>
             </TouchableOpacity>
           </ThemedView>
@@ -676,7 +706,7 @@ export default function ProfileScreen() {
             
             <TouchableOpacity 
               style={styles.menuItem}
-              onPress={() => setCountryModalVisible(true)}
+              onPress={() => router.push('/settings-country')}
             >
               <View style={styles.menuItemContent}>
                 <View style={styles.menuItemLeft}>
@@ -702,7 +732,7 @@ export default function ProfileScreen() {
 
             <TouchableOpacity 
               style={styles.menuItem}
-              onPress={() => router.push('/notification-settings')}
+              onPress={() => router.push('/settings-notification')}
             >
               <View style={styles.menuItemContent}>
                 <View style={styles.menuItemLeft}>
@@ -727,59 +757,8 @@ export default function ProfileScreen() {
             </TouchableOpacity>
           </ThemedView>
           
-          <View style={{ height: 30 }} />
+          <View style={{ height: 80 }} />
         </ScrollView>
-
-        {/* Country Selection Modal */}
-        <View 
-          style={[
-            styles.modalOverlay,
-            countryModalVisible && { backgroundColor: 'rgb(0, 0, 0)' }
-          ]}
-          pointerEvents={countryModalVisible ? 'auto' : 'none'}
-        ></View>
-        <Modal
-          visible={countryModalVisible}
-          animationType="slide"
-          transparent={true}
-          onRequestClose={() => setCountryModalVisible(false)}
-        >
-          <View style={styles.modalContainer}>
-            <ThemedView style={[styles.modalContent, { backgroundColor: Colors[colorScheme ?? 'light'].background }]}>
-              <View style={styles.modalHeader}>
-                <ThemedText style={styles.modalTitle}>Select Country</ThemedText>
-                <TouchableOpacity
-                  style={styles.closeButton}
-                  onPress={() => setCountryModalVisible(false)}
-                >
-                  <ThemedText style={styles.closeButtonText}>✕</ThemedText>
-                </TouchableOpacity>
-              </View>
-
-              <ScrollView style={styles.countryList}>
-                {availableCountries.map((country) => (
-                  <TouchableOpacity
-                    key={country}
-                    style={[
-                      styles.countryListItem,
-                      country === filters.selectedCountry && styles.selectedCountryItem
-                    ]}
-                    onPress={() => handleCountrySelect(country)}
-                  >
-                    <View style={styles.countryItemContent}>
-                      <ThemedText style={[
-                        styles.countryItemText,
-                        country === filters.selectedCountry && styles.selectedCountryText
-                      ]}>
-                        {countryFlags[country] || '🌍'} {country}
-                      </ThemedText>
-                    </View>
-                  </TouchableOpacity>
-                ))}
-              </ScrollView>
-            </ThemedView>
-          </View>
-        </Modal>
         </>
       ) : (
         // Show login form when not authenticated
@@ -978,75 +957,7 @@ const styles = StyleSheet.create({
   countryValue: {
     fontSize: 16,
   },
-  modalContainer: {
-    flex: 1,
-    justifyContent: 'flex-end',
-    backgroundColor: 'transparent',
-  },
-  modalOverlay: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    opacity: 0.5,
-  },
-  modalContent: {
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    padding: 20,
-    maxHeight: '80%',
-  },
-  modalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 20,
-  },
-  modalTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-  },
-  closeButton: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: 'rgba(0, 0, 0, 0.1)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  closeButtonText: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#666',
-  },
-  countryList: {
-    marginBottom: 24,
-  },
-  countryListItem: {
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderRadius: 8,
-    marginBottom: 8,
-    borderWidth: 1,
-    borderColor: 'rgba(0, 0, 0, 0.1)',
-  },
-  selectedCountryItem: {
-    backgroundColor: Colors.light.tint,
-    borderColor: Colors.light.tint,
-  },
-  countryItemContent: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  countryItemText: {
-    fontSize: 16,
-  },
-  selectedCountryText: {
-    color: '#fff',
-    fontWeight: '600',
-  },
+
   menuItem: {
     paddingVertical: 14,
     paddingHorizontal: 16,
@@ -1077,5 +988,24 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#666',
     lineHeight: 18,
+  },
+  menuItemRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  badge: {
+    backgroundColor: '#FF3B30',
+    borderRadius: 10,
+    minWidth: 20,
+    height: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 6,
+  },
+  badgeText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '600',
   },
 });

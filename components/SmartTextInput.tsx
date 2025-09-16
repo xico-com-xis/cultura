@@ -15,6 +15,7 @@ export interface ExtendedOrganizer {
   profileImage?: string;
   isExternal?: boolean;
   email?: string;
+  status?: 'pending' | 'accepted' | 'declined';
 }
 
 interface SmartTextInputProps {

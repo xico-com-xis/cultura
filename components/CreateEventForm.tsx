@@ -297,6 +297,30 @@ export default function CreateEventForm({ onClose, onEventCreated }: CreateEvent
     return text.replace(/@\[([^\]]+)\]\([^)]+\)/g, '$1');
   };
 
+  // Function to extract mentioned users from description
+  const extractMentionsFromDescription = (text: string): ExtendedOrganizer[] => {
+    const mentionRegex = /@\[([^\]]+)\]\(([^)]+)\)/g;
+    const mentions: ExtendedOrganizer[] = [];
+    let match;
+
+    while ((match = mentionRegex.exec(text)) !== null) {
+      const [, name, id] = match;
+      // Only add app users (those with valid UUIDs), skip external mentions
+      if (id && id.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i)) {
+        mentions.push({
+          id,
+          name,
+          email: '', // We'll need to fetch this from the database if needed
+          profileImage: undefined,
+          isExternal: false,
+          status: 'pending',
+        });
+      }
+    }
+
+    return mentions;
+  };
+
   const handleSubmit = async () => {
     if (!isFormValid()) {
       let errorMessage = 'Please fill in all required fields';
@@ -400,14 +424,44 @@ export default function CreateEventForm({ onClose, onEventCreated }: CreateEvent
       setUploadProgress('Creating event...');
 
       // Process all participants: both app users and external participants
-      // We'll store external participants with additional metadata
-      const allParticipants: ExtendedOrganizer[] = selectedParticipants.map(participant => ({
-        id: participant.id,
-        name: participant.name,
-        email: participant.email,
-        profileImage: participant.profileImage,
-        isExternal: participant.isExternal || false,
+      // Extract mentioned users from description first
+      const mentionedUsers = extractMentionsFromDescription(description);
+      const mentionedUserIds = new Set(mentionedUsers.map(u => u.id));
+      
+      console.log('Description:', description);
+      console.log('Extracted mentions:', mentionedUsers);
+      console.log('Selected participants:', selectedParticipants);
+      console.log('Mentioned user IDs:', Array.from(mentionedUserIds));
+
+      // For manually selected participants (not mentioned in text), create accepted entries
+      const manuallySelectedParticipants: ExtendedOrganizer[] = selectedParticipants
+        .filter(participant => !mentionedUserIds.has(participant.id)) // Exclude mentioned users
+        .map(participant => ({
+          id: participant.id,
+          name: participant.name,
+          email: participant.email,
+          profileImage: participant.profileImage,
+          isExternal: participant.isExternal || false,
+          status: 'accepted', // Manually selected participants are automatically accepted
+        }));
+
+      // For mentioned users in description, create pending requests
+      const pendingParticipants: ExtendedOrganizer[] = mentionedUsers.map(mention => ({
+        id: mention.id,
+        name: mention.name,
+        email: mention.email || '',
+        profileImage: mention.profileImage,
+        isExternal: false,
+        status: 'pending', // Mentioned users start as pending requests
       }));
+
+      // Combine all participants
+      const finalParticipants = [...manuallySelectedParticipants, ...pendingParticipants];
+      
+      console.log('Final participants breakdown:');
+      console.log('- Manual (accepted):', manuallySelectedParticipants);
+      console.log('- Mentions (pending):', pendingParticipants);
+      console.log('- Combined final:', finalParticipants);
 
       // Clean description text for display (remove mention markup)
       const cleanedDescription = cleanDescriptionText(description.trim());
@@ -428,7 +482,7 @@ export default function CreateEventForm({ onClose, onEventCreated }: CreateEvent
           profileImage: undefined,
         },
         professionals: [],
-        participants: allParticipants, // Include all participants with metadata
+        participants: finalParticipants, // Use combined participants (accepted + pending)
         accessibility: [],
         ticketInfo,
         participationType, // Include participation type

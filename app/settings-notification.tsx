@@ -146,11 +146,20 @@ export default function NotificationSettingsScreen() {
       <>
         <Stack.Screen 
           options={{
-            title: 'Notification Settings',
-            headerBackTitle: 'Settings'
+            headerShown: false,
           }} 
         />
         <ThemedView style={styles.container}>
+          <ThemedView style={styles.header}>
+            <TouchableOpacity 
+              style={styles.headerBackButton}
+              onPress={() => router.back()}
+            >
+              <IconSymbol name="chevron.left" size={24} color={Colors[colorScheme ?? 'light'].tint} />
+            </TouchableOpacity>
+            <ThemedText style={styles.headerTitle}>Notification Settings</ThemedText>
+            <View style={{ width: 40 }} />
+          </ThemedView>
           <ThemedView style={styles.centerContent}>
             <IconSymbol name="person.circle" size={80} color="#ccc" />
             <ThemedText style={styles.emptyTitle}>Sign In Required</ThemedText>
@@ -167,11 +176,20 @@ export default function NotificationSettingsScreen() {
     <>
       <Stack.Screen 
         options={{
-          title: 'Notification Settings',
-          headerBackTitle: 'Settings'
+          headerShown: false,
         }} 
       />
       <ThemedView style={styles.container}>
+        <ThemedView style={styles.header}>
+          <TouchableOpacity 
+            style={styles.headerBackButton}
+            onPress={() => router.back()}
+          >
+            <IconSymbol name="chevron.left" size={24} color={Colors[colorScheme ?? 'light'].tint} />
+          </TouchableOpacity>
+          <ThemedText style={styles.headerTitle}>Notification Settings</ThemedText>
+          <View style={{ width: 40 }} />
+        </ThemedView>
         <ThemedView style={styles.content}>
           <ThemedView style={styles.descriptionContainer}>
             <ThemedText style={styles.description}>
@@ -238,6 +256,28 @@ export default function NotificationSettingsScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    paddingTop: 50,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e0e0e0',
+  },
+  headerBackButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  headerTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    flex: 1,
+    textAlign: 'center',
   },
   content: {
     flex: 1,
