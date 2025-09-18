@@ -1340,7 +1340,7 @@ export const EventProvider: React.FC<{children: React.ReactNode}> = ({ children 
           profileImage: undefined
         },
         professionals: eventData.professionals || [],
-        participants: eventData.participants || [], // Include participants
+        participants: [], // Start with empty participants - let background refresh populate with correct status
         accessibility: eventData.accessibility || [],
         ticketInfo: eventData.ticketInfo,
         participationType: eventData.participationType || 'audience',
@@ -1352,33 +1352,26 @@ export const EventProvider: React.FC<{children: React.ReactNode}> = ({ children 
       // Add to local state immediately for instant UI update
       setEvents(prevEvents => [...prevEvents, localEvent]);
 
-      // Background refresh to sync with database
+      // Background refresh to fetch participants for the newly created event
       setTimeout(async () => {
         try {
-          const { data, error } = await supabase.rpc('get_events_with_details');
+          console.log('Fetching participants for newly created event:', eventRecord.id);
+          const participants = await fetchEventParticipants([String(eventRecord.id)]); // Pass as array
           
-          if (error) {
-            console.error('Background refresh error:', error);
-            return;
-          }
-
-          if (data && data.length > 0) {
-            // Extract all unique user IDs for batch fetching
-            const userIds = [...new Set(data.map((event: any) => event.created_by).filter(Boolean))] as string[];
-            const userNameMap = await fetchUserDisplayNames(userIds);
-            
-            // Transform events with the user name map
-            const transformedEvents: Event[] = data.map((dbEvent: any) => {
-              const organizerName = userNameMap[dbEvent.created_by] || 'Event Organizer';
-              return transformEventDataSync(dbEvent, organizerName);
-            }).filter(Boolean);
-            
-            setEvents(currentEvents => mergeEventsSmartly(currentEvents, transformedEvents));
+          if (participants && participants[String(eventRecord.id)]) {
+            // Update only the newly created event with proper participant data
+            setEvents(currentEvents => 
+              currentEvents.map(event => 
+                event.id === String(eventRecord.id) 
+                  ? { ...event, participants: participants[String(eventRecord.id)] }
+                  : event
+              )
+            );
           }
         } catch (error) {
-          console.error('Background refresh failed:', error);
+          console.error('Failed to fetch participants for new event:', error);
         }
-      }, 2000);
+      }, 500); // Faster refresh to show participant status sooner
 
       // Notify backend about the new event (for follower notifications)
       try {
